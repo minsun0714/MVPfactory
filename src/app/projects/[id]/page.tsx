@@ -64,7 +64,7 @@ export default function ProjectPage() {
       {run.status === "WAITING" && run.decisions.filter((d) => d.status === "PENDING").map((d) => <DecisionForm key={d.id} decision={d} onAnswered={() => setRefresh((v) => v + 1)} />)}
       <h2>결정 요약</h2>{run.decisions.length === 0 ? <p className="card">기록된 결정이 없습니다.</p> : run.decisions.map((d) => <div className="card" key={d.id}><h3>{d.type}</h3><p>{d.status === "PENDING" ? "응답 대기" : `응답: ${d.response}`}</p></div>)}
       <h2>역할별 산출물</h2>{run.artifacts.length === 0 ? <p className="card">아직 산출물이 없습니다.</p> : run.artifacts.map((a) => <div className="card" key={a.id}><h3>{a.role} · {a.type}</h3>{Object.entries(a.content).map(([key, value]) => <p key={key}><strong>{key.replaceAll("_", " ")}:</strong> {value}</p>)}</div>)}
-      <h2>결과 및 연결 상태</h2><div className="card"><p>확인된 항목: 데모 역할별 계획 및 CEO 결정 기록</p><p>미구현: 실제 AI 생성, 생성 앱 코드, DB 자동 생성, GitHub push, Vercel 배포 및 수정 실행</p><ul><li>팩토리 운영 DB: 연결됨 (이 프로젝트 저장소)</li><li>생성 앱 DB (Supabase): 미연결</li><li>GitHub: 미연결</li><li>Vercel: 미연결</li><li>실제 LLM: 미연결</li></ul><button disabled title="실제 연동은 후속 작업입니다">배포 (미구현)</button></div>
+      <h2>결과 및 연결 상태</h2><div className="card"><p>확인된 항목: 데모 역할별 계획 및 CEO 결정 기록</p><p>미구현: 실제 AI 생성, 생성 앱 코드, DB 자동 생성, GitHub push, Vercel 배포 및 수정 실행</p><ul><li>팩토리 운영 DB: {error ? "연결 상태 확인 불가" : "연결됨 (이 프로젝트 저장소)"}</li><li>생성 앱 DB (Supabase): 미연결</li><li>GitHub: 미연결</li><li>Vercel: 미연결</li><li>실제 LLM: 미연결</li></ul><button disabled title="실제 연동은 후속 작업입니다">배포 (미구현)</button></div>
     </>}
   </>;
 }
