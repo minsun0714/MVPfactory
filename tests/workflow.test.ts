@@ -21,7 +21,11 @@ async function waitFor(runId: string, status: string) {
   for (let i = 0; i < 200; i++) {
     const run = await db.run.findUniqueOrThrow({
       where: { id: runId },
-      include: { artifacts: true, decisions: true, project: true },
+      include: {
+        artifacts: true,
+        decisions: { orderBy: { createdAt: "asc" } },
+        project: true,
+      },
     });
     if (run.status === status) return run;
     if (run.status === "FAILED") throw new Error(run.error ?? "실행 실패");

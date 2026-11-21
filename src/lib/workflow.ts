@@ -7,7 +7,7 @@ import {
   interrupt,
 } from "@langchain/langgraph";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import { db } from "./db";
+import { db } from "@/lib/db";
 import {
   developer,
   designer,
@@ -15,7 +15,7 @@ import {
   pm,
   RoleOutput,
   validateOutput,
-} from "./roles";
+} from "@/lib/roles";
 
 const State = Annotation.Root({ runId: Annotation<string>() });
 type StateValue = typeof State.State;

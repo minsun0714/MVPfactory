@@ -1,7 +1,7 @@
 import { Client } from "pg";
 import { existsSync } from "node:fs";
-import { db } from "./lib/db";
-import { createWorkflow, processRun } from "./lib/workflow";
+import { db } from "@/lib/db";
+import { createWorkflow, processRun } from "@/lib/workflow";
 
 async function main() {
   if (existsSync(".env")) process.loadEnvFile();

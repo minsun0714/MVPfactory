@@ -66,6 +66,8 @@ npm test
 - ESLint의 Next.js Core Web Vitals와 TypeScript 규칙으로 코드 품질을 검사합니다. Prettier와 충돌하는 ESLint 서식 규칙은 비활성화합니다.
 - Prettier 설정을 공통 서식 기준으로 사용합니다. `npm run format`으로 서식을 적용하고 `npm run format:check`로 확인합니다. 생성 파일과 잠금 파일은 서식 검사에서 제외합니다.
 - 사람과 AI 모두 변경 후 `npm run lint`, `npm run format:check`, `npm run typecheck`를 실행하고, 동작에 영향을 주는 변경은 관련 테스트와 빌드도 확인합니다.
+- API Route Handler는 요청·응답 변환만 담당하고 `src/server`에서 구성한 유스케이스를 호출합니다. `src/application`은 주입된 저장 계약으로 작업을 조정하고, `src/domain`은 입력·결정 규칙을, `src/infrastructure`는 Prisma 조회와 원자적 저장을 담당합니다.
+- 내부 소스 import는 `@/` alias를 사용합니다.
 - `src/app` 페이지는 라우팅과 훅 연결에 집중합니다. 프로젝트 목록, 생성 폼, 상세 화면처럼 크거나 재사용되는 뷰는 `src/components`에 둡니다. 뷰에는 필요한 타입 데이터와 콜백을 명시적으로 전달하고 데이터 접근을 맡기지 않습니다.
 - `src/hooks`는 클라이언트 상태, 생명주기, 이벤트 흐름을 관리하고 HTTP 요청·응답은 `src/services`를 호출합니다. 뷰 컴포넌트는 서비스나 `fetch`를 직접 호출하지 않아 입력과 부수 효과를 분리하고 교체 가능하게 유지합니다.
 - 각 컴포넌트는 진행 상황, 결정 요약, 산출물 표시처럼 하나의 뷰 책임에 집중합니다. 페이지를 의미 있게 단순화하거나 여러 곳에서 재사용할 때 추출하고, 한 줄 표현을 이름만 바꾸는 래퍼나 불필요한 추상화는 만들지 않습니다.

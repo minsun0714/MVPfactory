@@ -2,7 +2,7 @@
 
 import { useDecisionResponse } from "@/hooks/useDecisionResponse";
 import type { Decision } from "@/services/projects";
-import { DecisionResponseFormView } from "./DecisionResponseFormView";
+import { DecisionResponseFormView } from "@/components/projects/DecisionResponseFormView";
 
 type DecisionResponseFormProps = {
   decision: Decision;

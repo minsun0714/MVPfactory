@@ -1,4 +1,4 @@
-import { readJson } from "./api";
+import { readJson } from "@/services/api";
 
 export async function answerDecision(
   id: string,
