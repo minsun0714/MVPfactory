@@ -1,0 +1,47 @@
+model Project {
+  id                   String      @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  name                 String
+  /// 원본 아이디어. 수정하지 않는다.
+  idea                 String
+  purpose              String?
+  constraints          String?
+  /// 다음 Run의 기본값
+  ceoLevel             CeoLevel
+  archivedAt           DateTime?   @db.Timestamptz(3)
+  /// 접수된 실행 목표의 순서. 새 Run이 접수될 때 증가한다.
+  projectGeneration    Int         @default(0)
+  confirmedSpecVersion Int?
+  /// 마지막 정상 배포. 수정 Run이 실패해도 덮어쓰지 않는다.
+  lastGoodDeploymentId String?
+  lastGoodDeployment   Deployment? @relation("LastGoodDeployment", fields: [lastGoodDeploymentId], references: [id], onDelete: Restrict)
+  createdAt            DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime    @updatedAt @db.Timestamptz(3)
+
+  specs       ProductSpec[]
+  runs        Run[]
+  resources   ExternalResource[]
+  deployments Deployment[]        @relation("ProjectDeployments")
+  operations  ExternalOperation[]
+
+  @@index([workspaceId, archivedAt, updatedAt(sort: Desc)])
+}
+
+/// 기능·화면·데이터·완료 조건의 버전. 만든 뒤 수정하지 않는다.
+model ProductSpec {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  version        Int
+  /// content 형식의 버전
+  schemaVersion  Int
+  /// 확정 요구사항 한 줄 요약
+  summary        String
+  content        Json
+  createdByRunId String?
+  createdByRun   Run?     @relation("SpecCreatedByRun", fields: [createdByRunId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([projectId, version])
+}

@@ -2,6 +2,9 @@
   "name": "mvpfactory",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "schema": "prisma/schema"
+  },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
@@ -9,7 +12,9 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "worker": "tsx src/worker.ts",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "tasks": "tsx scripts/tasks.ts",
+    "tasks:check": "tsx scripts/tasks.ts --check",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
@@ -19,6 +24,7 @@
     "@prisma/client": "^6.12.0",
     "next": "16.4.6",
     "pg": "^8.23.1",
+    "pixi.js": "^8.23.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

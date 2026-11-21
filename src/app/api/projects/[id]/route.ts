@@ -1,33 +1,9 @@
-import { NextResponse } from "next/server";
-import { apiError } from "@/lib/api";
-import { db, DEV_USER_ID } from "@/lib/db";
+import { getContainer } from "@/server/container";
+import { handle, json, type IdParams } from "@/server/http";
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    const project = await db.project.findFirst({
-      where: { id, ownerId: DEV_USER_ID },
-      include: {
-        resources: true,
-        runs: {
-          orderBy: { createdAt: "desc" },
-          include: {
-            artifacts: { orderBy: { createdAt: "asc" } },
-            decisions: { orderBy: { createdAt: "asc" } },
-          },
-        },
-      },
-    });
-    if (!project)
-      return NextResponse.json(
-        { error: "프로젝트를 찾을 수 없습니다." },
-        { status: 404 },
-      );
-    return NextResponse.json(project);
-  } catch (error) {
-    return apiError(error);
-  }
-}
+export const runtime = "nodejs";
+
+export const GET = (_request: Request, { params }: IdParams) =>
+  handle(async () =>
+    json(await getContainer().projects.get((await params).id)),
+  );

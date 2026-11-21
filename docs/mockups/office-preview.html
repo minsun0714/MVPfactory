@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>MVP 팩토리 · 사무실 UI 시안</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #F7F4F0;
+        color: #392C29;
+        font-family: sans-serif;
+      }
+      nav {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 24px;
+        background: #79513C;
+        color: #ffffff;
+      }
+      nav span {
+        margin-left: auto;
+        font-size: 13px;
+      }
+      button {
+        background: #fff;
+        color: #392C29;
+        border: 1px solid #B79B87;
+        padding: 10px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      button[aria-pressed="true"] {
+        background: #392C29;
+        color: white;
+      }
+      button:focus-visible {
+        outline: 3px solid #79513C;
+        outline-offset: 3px;
+      }
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      @media (max-width: 600px) {
+        nav {
+          flex-wrap: wrap;
+        }
+        nav span {
+          margin-left: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="시안 비교">
+      <button type="button" data-view="office-default" aria-pressed="true">
+        01 기본 사무실
+      </button>
+      <button type="button" data-view="office-panel" aria-pressed="false">
+        02 업무 패널 열림
+      </button>
+      <span>검토용 초안 · 실제 앱 동작 없음</span>
+    </nav>
+    <main>
+      <img
+        id="preview"
+        src="office-default.svg"
+        alt="아이소메트릭 사무실, 팀원 네 명과 CEO 결정 알림이 있는 기본 화면"
+      />
+    </main>
+    <script>
+      const preview = document.getElementById("preview");
+      document.querySelectorAll("button[data-view]").forEach((button) => {
+        button.addEventListener("click", () => {
+          document
+            .querySelectorAll("button[data-view]")
+            .forEach((item) =>
+              item.setAttribute("aria-pressed", String(item === button)),
+            );
+          preview.src = button.dataset.view + ".svg";
+          preview.alt =
+            button.dataset.view === "office-panel"
+              ? "사무실 오른쪽에 PM의 CEO 검토 업무 패널이 열린 화면"
+              : "아이소메트릭 사무실, 팀원 네 명과 CEO 결정 알림이 있는 기본 화면";
+        });
+      });
+    </script>
+  </body>
+</html>

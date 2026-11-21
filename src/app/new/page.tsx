@@ -1,8 +1,4 @@
-"use client";
-import { useNewProject } from "@/hooks/useNewProject";
-import { NewProjectFormView } from "@/components/projects/NewProjectFormView";
-
+import { redirect } from "next/navigation";
 export default function NewProject() {
-  const { error, busy, submit } = useNewProject();
-  return <NewProjectFormView error={error} busy={busy} onSubmit={submit} />;
+  redirect("/projects");
 }
