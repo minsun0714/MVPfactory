@@ -66,7 +66,7 @@ npm test
 - ESLint의 Next.js Core Web Vitals와 TypeScript 규칙으로 코드 품질을 검사합니다. Prettier와 충돌하는 ESLint 서식 규칙은 비활성화합니다.
 - Prettier 설정을 공통 서식 기준으로 사용합니다. `npm run format`으로 서식을 적용하고 `npm run format:check`로 확인합니다. 생성 파일과 잠금 파일은 서식 검사에서 제외합니다.
 - 사람과 AI 모두 변경 후 `npm run lint`, `npm run format:check`, `npm run typecheck`를 실행하고, 동작에 영향을 주는 변경은 관련 테스트와 빌드도 확인합니다.
-- 클라이언트 페이지는 화면 구성에 집중하고 데이터 조회, 요청, 상태 및 이벤트 처리는 `src/hooks`의 커스텀 훅에 둡니다. 서버의 비즈니스 로직은 서버 측 모듈에 유지하며 훅에서 중복 구현하지 않습니다.
+- 클라이언트 페이지는 화면 구성에 집중하고 상태 및 이벤트 처리는 `src/hooks`의 커스텀 훅에 둡니다. HTTP 요청과 응답 처리는 `src/services`에 모아 훅에서 호출합니다. 서버의 비즈니스 로직은 서버 측 모듈에 유지하며 클라이언트에서 중복 구현하지 않습니다.
 
 ## 사용자와 후속 연동
 

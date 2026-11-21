@@ -1,22 +1,13 @@
 import { useEffect, useState } from "react";
-
-type Project = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-  runs: { status: string }[];
-};
+import { getProjects, type ProjectSummary } from "@/services/projects";
 
 export function useProjects() {
-  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/projects")
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error);
+    getProjects()
+      .then((data) => {
         setProjects(data);
       })
       .catch((e) => setError(e.message));

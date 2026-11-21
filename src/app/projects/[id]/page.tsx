@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useDecisionResponse } from "@/hooks/useDecisionResponse";
-import { useProject, type Decision } from "@/hooks/useProject";
+import { useProject } from "@/hooks/useProject";
+import type { Decision } from "@/services/projects";
 
 const statusLabels: Record<string, string> = {
   QUEUED: "대기",
