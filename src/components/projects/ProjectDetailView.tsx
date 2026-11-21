@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useDecisionResponse } from "@/hooks/useDecisionResponse";
+import { DecisionResponseForm } from "@/components/projects/DecisionResponseForm";
 import type { Decision, Project, Run } from "@/services/projects";
 
 const statusLabels: Record<string, string> = {
@@ -19,39 +19,6 @@ type ProjectDetailViewProps = {
   pendingDecisions: Decision[];
   onAnswered: () => void;
 };
-
-function DecisionResponseForm({
-  decision,
-  onAnswered,
-}: {
-  decision: Decision;
-  onAnswered: () => void;
-}) {
-  const { error, busy, submit } = useDecisionResponse(decision.id, onAnswered);
-
-  return (
-    <form className="card" onSubmit={submit}>
-      <h3>CEO 검토 요청: {decision.type}</h3>
-      <pre>{decision.proposal}</pre>
-      <label htmlFor={`response-${decision.id}`}>승인 또는 수정 의견</label>
-      <textarea
-        id={`response-${decision.id}`}
-        name="response"
-        maxLength={4000}
-        required
-        placeholder="예: 승인합니다. 또는 변경할 내용을 입력하세요."
-      />
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <button disabled={busy}>
-        {busy ? "응답 전송 중…" : "응답하고 계속하기"}
-      </button>
-    </form>
-  );
-}
 
 function ProjectProgress({ run }: { run: Run }) {
   return (
