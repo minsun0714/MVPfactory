@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CeoLevel {
+  DELEGATE
+  KEY_DECISIONS
+  COLLABORATIVE
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+}
+
+enum DecisionStatus {
+  PENDING
+  ANSWERED
+}
+
+model User {
+  id       String    @id
+  projects Project[]
+}
+
+model Project {
+  id           String             @id @default(cuid())
+  name         String
+  idea         String
+  ceoLevel     CeoLevel
+  requirements String
+  ownerId      String
+  owner        User               @relation(fields: [ownerId], references: [id])
+  runs         Run[]
+  resources    ExternalResource[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model Run {
+  id         String     @id @default(cuid())
+  projectId  String
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mode       String     @default("DEMO")
+  status     RunStatus  @default(QUEUED)
+  stage      String     @default("대기")
+  startedAt  DateTime?
+  finishedAt DateTime?
+  error      String?
+  artifacts  Artifact[]
+  decisions  Decision[]
+  createdAt  DateTime   @default(now())
+
+  @@index([status, createdAt])
+}
+
+model Artifact {
+  id        String   @id @default(cuid())
+  runId     String
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  role      String
+  type      String
+  content   Json
+  createdAt DateTime @default(now())
+
+  @@unique([runId, type])
+}
+
+model Decision {
+  id         String         @id @default(cuid())
+  runId      String
+  run        Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  type       String
+  proposal   String
+  status     DecisionStatus @default(PENDING)
+  response   String?
+  answeredAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  @@unique([runId, type])
+}
+
+model ExternalResource {
+  id         String  @id @default(cuid())
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider   String
+  resourceId String?
+  url        String?
+
+  @@unique([projectId, provider])
+}
