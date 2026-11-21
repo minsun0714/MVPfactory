@@ -13,8 +13,16 @@ export interface Integrations {
 }
 
 export const integrations: Integrations = {
-  async generateWithLLM() { throw new IntegrationNotConfiguredError("LLM"); },
-  async provisionAppDatabase() { throw new IntegrationNotConfiguredError("Supabase"); },
-  async publishRepository() { throw new IntegrationNotConfiguredError("GitHub"); },
-  async deploy() { throw new IntegrationNotConfiguredError("Vercel"); },
+  async generateWithLLM() {
+    throw new IntegrationNotConfiguredError("LLM");
+  },
+  async provisionAppDatabase() {
+    throw new IntegrationNotConfiguredError("Supabase");
+  },
+  async publishRepository() {
+    throw new IntegrationNotConfiguredError("GitHub");
+  },
+  async deploy() {
+    throw new IntegrationNotConfiguredError("Vercel");
+  },
 };
