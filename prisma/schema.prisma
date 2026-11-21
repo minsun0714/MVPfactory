@@ -83,6 +83,7 @@ model Decision {
   status     DecisionStatus @default(PENDING)
   response   String?
   answeredAt DateTime?
+  appliedAt  DateTime?
   createdAt  DateTime       @default(now())
 
   @@unique([runId, type])
