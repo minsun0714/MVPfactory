@@ -1,0 +1,7 @@
+/// GET /api/health의 워커 상태 판단에 사용한다.
+model WorkerHeartbeat {
+  instanceId String   @id
+  lastSeenAt DateTime @db.Timestamptz(3)
+  /// 워커·워크플로우 버전
+  version    String
+}

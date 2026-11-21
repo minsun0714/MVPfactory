@@ -1,47 +1,40 @@
+import type { ProjectRepository } from "@/application/ports";
+import { AppError } from "@/domain/errors";
+import { checkScope } from "@/domain/scope";
 import {
-  parseProject,
-  parseDecisionResponse,
-  RequestError,
-} from "@/domain/requests";
-import type { NewProject, DecisionOutcome } from "@/domain/requests";
+  parseCreateProject,
+  parseProjectListQuery,
+  parseScopeCheck,
+  requireIdempotencyKey,
+} from "@/domain/validation";
 
-export interface ProjectRepository<List, Detail, Created> {
-  list(ownerId: string): Promise<List>;
-  find(id: string, ownerId: string): Promise<Detail | null>;
-  create(input: NewProject, ownerId: string): Promise<Created>;
-  answer(
-    id: string,
-    response: string,
-    ownerId: string,
-  ): Promise<DecisionOutcome>;
-}
+export function createProjectUseCases(projects: ProjectRepository) {
+  async function requireProject(id: string) {
+    const project = await projects.find(id);
+    if (!project)
+      throw new AppError("NOT_FOUND", "프로젝트를 찾을 수 없습니다.");
+    return project;
+  }
 
-export function createProjectUseCases<List, Detail, Created>(
-  repository: ProjectRepository<List, Detail, Created>,
-  ownerId: string,
-) {
   return {
-    list: () => repository.list(ownerId),
-    async find(id: string) {
-      const project = await repository.find(id, ownerId);
-      if (!project) throw new RequestError("프로젝트를 찾을 수 없습니다.", 404);
-      return project;
+    create(body: unknown, idempotencyKey: string | null) {
+      const request = parseCreateProject(body);
+      return projects.create({
+        key: requireIdempotencyKey(idempotencyKey),
+        request,
+      });
     },
-    create: (input: unknown) => repository.create(parseProject(input), ownerId),
-    async answer(id: string, input: unknown) {
-      const outcome = await repository.answer(
-        id,
-        parseDecisionResponse(input),
-        ownerId,
-      );
-      if (outcome === "missing")
-        throw new RequestError("결정을 찾을 수 없습니다.", 404);
-      if (outcome === "conflict")
-        throw new RequestError(
-          "이미 응답되었거나 검토 대기 중이 아닙니다.",
-          409,
-        );
-      return { ok: true };
+    list: (params: URLSearchParams) =>
+      projects.list(parseProjectListQuery(params)),
+    get: requireProject,
+    async archive(id: string) {
+      await requireProject(id);
+      await projects.setArchived(id, true);
     },
+    async unarchive(id: string) {
+      await requireProject(id);
+      await projects.setArchived(id, false);
+    },
+    scopeCheck: (body: unknown) => checkScope(parseScopeCheck(body)),
   };
 }

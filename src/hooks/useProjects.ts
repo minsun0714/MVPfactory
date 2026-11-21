@@ -6,11 +6,18 @@ export function useProjects() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let active = true;
     getProjects()
       .then((data) => {
-        setProjects(data);
+        if (active) setProjects(data);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        if (active)
+          setError(e instanceof Error ? e.message : "조회에 실패했습니다.");
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   return { projects, error };

@@ -1,0 +1,88 @@
+// 팩토리 운영 DB 스키마. 설계 문서: docs/DB_SCHEMA.md
+// 열거형 값은 src/contracts의 상수와 같다. 값을 바꿀 때는 계약을 먼저 고친다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CeoLevel {
+  DELEGATE
+  KEY_DECISIONS
+  COLLABORATIVE
+}
+
+enum RunMode {
+  REAL
+  DEMO
+}
+
+enum RoleId {
+  PM
+  PLANNER
+  DESIGNER
+  DEVELOPER
+}
+
+enum Provider {
+  github
+  vercel
+  supabase
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  NOT_CONNECTED
+  INSUFFICIENT_PERMISSION
+  DISCONNECTED
+}
+
+enum RepoVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum ExternalOperationStatus {
+  PLANNED
+  REQUESTED
+  SUCCEEDED
+  FAILED
+  UNKNOWN
+}
+
+/// 로그인 없는 단일 사용자 작업 공간. 행은 하나(id = "default")다.
+model Workspace {
+  id                    String         @id @default("default")
+  repoVisibility        RepoVisibility @default(PRIVATE)
+  /// 실행 한도. null은 "한도 없음"이 아니라 "미설정"이다.
+  limitMaxModelCalls    Int?
+  limitMaxFixAttempts   Int?
+  limitMaxActiveSeconds Int?
+  limitMaxEstimatedCost Decimal?       @db.Decimal(12, 4)
+  createdAt             DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime       @updatedAt @db.Timestamptz(3)
+
+  connections   ConnectionState[]
+  projects      Project[]
+  company       CompanyLayout?
+  activeRunLock ActiveRunLock?
+}
+
+/// 공급자 연결 상태의 마지막 확인 결과. 비밀값은 저장하지 않는다.
+model ConnectionState {
+  id          String           @id @default(cuid())
+  workspaceId String
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  provider    Provider
+  status      ConnectionStatus
+  target      String?
+  checkedAt   DateTime?        @db.Timestamptz(3)
+  message     String?
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, provider])
+}

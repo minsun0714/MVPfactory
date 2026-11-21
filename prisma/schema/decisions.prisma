@@ -1,0 +1,61 @@
+enum DecisionKind {
+  SCOPE_REVIEW
+  DESIGN_REVIEW
+  INTEGRATED_REVIEW
+  EXCEPTION
+}
+
+enum DecisionStatus {
+  PREPARED
+  OPEN
+  ANSWERED
+  APPLIED
+  SUPERSEDED
+}
+
+enum DecisionChoice {
+  APPROVE
+  REQUEST_CHANGES
+  SELECT_OPTION
+}
+
+/// 상태는 한 방향으로만 바뀐다: PREPARED → OPEN → ANSWERED → APPLIED, PREPARED·OPEN → SUPERSEDED.
+model Decision {
+  id                  String          @id @default(cuid())
+  runId               String
+  run                 Run             @relation(fields: [runId], references: [id], onDelete: Restrict)
+  kind                DecisionKind
+  /// 같은 검토 지점의 회차. REQUEST_CHANGES 뒤 재검토는 새 회차·새 행이다.
+  round               Int             @default(1)
+  status              DecisionStatus  @default(PREPARED)
+  /// 사용자가 본 제안을 식별한다. 응답과 함께 보낸다.
+  proposalVersion     Int
+  /// 제안 내용 해시. 같은 내용을 새 질문으로 중복 생성하지 않는다.
+  proposalFingerprint String
+  title               String
+  summary             String
+  /// { heading, items[] }[]
+  proposal            Json
+  /// 문자열 배열
+  changesFromPrevious Json
+  /// EXCEPTION의 선택지 { id, label, description }[]
+  options             Json
+  /// 연결된 LangGraph interrupt 식별자
+  interruptRef        String?
+  responseChoice      DecisionChoice?
+  responseOptionId    String?
+  responseComment     String?
+  answeredAt          DateTime?       @db.Timestamptz(3)
+  appliedAt           DateTime?       @db.Timestamptz(3)
+  /// 적용 전 제안이 새 제안으로 대체된 경우
+  supersededById      String?         @unique
+  supersededBy        Decision?       @relation("DecisionSupersede", fields: [supersededById], references: [id], onDelete: Restrict)
+  supersedes          Decision?       @relation("DecisionSupersede")
+  openedAt            DateTime?       @db.Timestamptz(3)
+  createdAt           DateTime        @default(now()) @db.Timestamptz(3)
+
+  meetings Meeting[]
+
+  @@unique([runId, kind, round])
+  @@index([status, openedAt])
+}

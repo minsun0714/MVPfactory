@@ -1,6 +1,7 @@
+import { ToastHost } from "@/components/ui/ToastHost";
 import type { Metadata } from "next";
 import Link from "next/link";
-import "./globals.css";
+import "@/app/globals.css";
 
 export const metadata: Metadata = {
   title: "MVP 팩토리",
@@ -26,6 +27,7 @@ export default function RootLayout({
           </div>
           {children}
         </main>
+        <ToastHost />
       </body>
     </html>
   );

@@ -1,0 +1,102 @@
+enum ExternalResourceKind {
+  REPOSITORY
+  DATABASE
+  DEPLOYMENT_PROJECT
+}
+
+enum DeploymentStage {
+  CANDIDATE
+  PUBLISHED
+  FAILED
+  SUPERSEDED
+}
+
+/// 프로젝트에 묶인 외부 리소스. 수정 Run은 이것을 재사용한다.
+model ExternalResource {
+  id         String               @id @default(cuid())
+  projectId  String
+  project    Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  provider   Provider
+  kind       ExternalResourceKind
+  /// 공급자가 준 ID
+  externalId String
+  url        String?
+  /// 조직, 지역 등. 비밀값 없음
+  meta       Json                 @default("{}")
+  createdAt  DateTime             @default(now()) @db.Timestamptz(3)
+
+  migrations AppMigration[]
+
+  @@unique([projectId, provider, kind])
+}
+
+/// 외부 변경 원장. 같은 operationKey에 다른 대상·요청이 오면 충돌로 처리한다.
+model ExternalOperation {
+  id            String                  @id @default(cuid())
+  projectId     String
+  project       Project                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  runId         String?
+  run           Run?                    @relation(fields: [runId], references: [id], onDelete: Restrict)
+  /// 작업의 논리 목적. 재시도해도 같다.
+  operationKey  String                  @unique
+  provider      Provider
+  /// 예: CREATE_REPOSITORY, APPLY_MIGRATION, CREATE_DEPLOYMENT
+  kind          String
+  status        ExternalOperationStatus @default(PLANNED)
+  /// 최초 요청의 공급자 계정·대상. 이후 바꾸지 않는다.
+  targetAccount String
+  /// 정규화한 요청 내용의 해시
+  requestHash   String
+  /// 확인된 리소스 ID
+  externalId    String?
+  /// 공급자 응답·조회 결과 요약
+  evidence      Json?
+  attempt       Int                     @default(0)
+  /// 마지막으로 실제 상태를 확인한 시각
+  observedAt    DateTime?               @db.Timestamptz(3)
+  createdAt     DateTime                @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime                @updatedAt @db.Timestamptz(3)
+
+  @@index([projectId])
+}
+
+/// 생성 앱 DB에 적용한 변경 이력. 앱 DB의 실제 이력과 대조해 복구한다.
+model AppMigration {
+  id                 String           @id @default(cuid())
+  databaseResourceId String
+  databaseResource   ExternalResource @relation(fields: [databaseResourceId], references: [id], onDelete: Restrict)
+  version            String
+  /// 같은 버전에 다른 checksum이 들어오면 충돌로 차단한다.
+  checksum           String
+  /// PLANNED | APPLIED | FAILED
+  status             String
+  appliedAt          DateTime?        @db.Timestamptz(3)
+
+  @@unique([databaseResourceId, version])
+}
+
+/// 소스·커밋·DB·환경설정·배포의 대응(DeploymentManifest).
+model Deployment {
+  id                   String          @id @default(cuid())
+  projectId            String
+  project              Project         @relation("ProjectDeployments", fields: [projectId], references: [id], onDelete: Restrict)
+  runId                String
+  run                  Run             @relation(fields: [runId], references: [id], onDelete: Restrict)
+  /// Vercel 배포 ID
+  providerDeploymentId String
+  commitSha            String
+  /// SourceSnapshot.sourceDigest와 대응
+  sourceDigest         String
+  /// 비밀값이 아닌 환경설정 버전
+  envRevision          String
+  /// 이 배포가 기대하는 DB 마이그레이션 버전
+  migrationVersion     String?
+  url                  String?
+  stage                DeploymentStage @default(CANDIDATE)
+  createdAt            DateTime        @default(now()) @db.Timestamptz(3)
+
+  lastGoodFor Project[]            @relation("LastGoodDeployment")
+  reports     VerificationReport[]
+
+  @@unique([projectId, providerDeploymentId])
+}

@@ -1,22 +1,20 @@
-import { NextResponse } from "next/server";
-import { apiError, readRequestJson } from "@/lib/api";
-import { projects } from "@/server/projects";
+import { getContainer } from "@/server/container";
+import { handle, idempotencyKeyOf, json, readJsonBody } from "@/server/http";
 
-export async function GET() {
-  try {
-    return NextResponse.json(await projects.list());
-  } catch (error) {
-    return apiError(error);
-  }
-}
+export const runtime = "nodejs";
 
-export async function POST(request: Request) {
-  try {
-    return NextResponse.json(
-      await projects.create(await readRequestJson(request)),
-      { status: 201 },
-    );
-  } catch (error) {
-    return apiError(error);
-  }
-}
+export const GET = (request: Request) =>
+  handle(async () =>
+    json(await getContainer().projects.list(new URL(request.url).searchParams)),
+  );
+
+export const POST = (request: Request) =>
+  handle(async () =>
+    json(
+      await getContainer().projects.create(
+        await readJsonBody(request),
+        idempotencyKeyOf(request),
+      ),
+      201,
+    ),
+  );

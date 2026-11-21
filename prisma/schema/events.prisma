@@ -1,0 +1,73 @@
+enum MeetingStatus {
+  IN_PROGRESS
+  WAITING_CEO
+  ENDED
+  FAILED
+  INTERRUPTED
+}
+
+enum MeetingEntryKind {
+  STATEMENT
+  REACTION
+}
+
+/// 추가만 하는 기록. SSE와 새로고침 복원의 근거이며 수정·삭제하지 않는다.
+model RunEvent {
+  id         String   @id @default(cuid())
+  runId      String
+  run        Run      @relation(fields: [runId], references: [id], onDelete: Restrict)
+  /// Run 안에서 1부터 증가
+  sequence   Int
+  /// run.accepted 등. 종류가 늘어도 마이그레이션 없이 확장하고 계약 상수로 검증한다.
+  type       String
+  occurredAt DateTime @db.Timestamptz(3)
+  stageId    String?
+  role       RoleId?
+  /// 사용자에게 보여 줄 한 줄
+  summary    String
+  /// { artifactId?, decisionId?, meetingId? }
+  refs       Json
+  /// 종류별 추가 정보
+  data       Json
+
+  @@unique([runId, sequence])
+}
+
+/// 실제 작업·결정에 연결된 회의. 연결된 작업이 없는 회의는 만들지 않는다.
+model Meeting {
+  id           String        @id @default(cuid())
+  runId        String
+  run          Run           @relation(fields: [runId], references: [id], onDelete: Restrict)
+  decisionId   String?
+  decision     Decision?     @relation(fields: [decisionId], references: [id], onDelete: Restrict)
+  topic        String
+  /// 최대 4명
+  participants RoleId[]
+  status       MeetingStatus @default(IN_PROGRESS)
+  /// 결정 결과 요약
+  outcome      String?
+  startedAt    DateTime      @db.Timestamptz(3)
+  endedAt      DateTime?     @db.Timestamptz(3)
+
+  entries MeetingEntry[]
+
+  @@index([runId, startedAt])
+}
+
+model MeetingEntry {
+  id            String           @id @default(cuid())
+  meetingId     String
+  meeting       Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  kind          MeetingEntryKind
+  /// 회의 안에서의 순서
+  entryOrder    Int
+  /// 이 항목을 알린 RunEvent.sequence
+  eventSequence Int
+  role          RoleId
+  /// 발언 요약(STATEMENT). 서버가 저장한 문구
+  text          String?
+  /// NOD | THINK | ALERT (REACTION)
+  reactionKind  String?
+
+  @@unique([meetingId, eventSequence])
+}

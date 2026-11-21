@@ -1,0 +1,93 @@
+enum ArtifactAuthor {
+  PM
+  PLANNER
+  DESIGNER
+  DEVELOPER
+  SYSTEM
+}
+
+enum VerificationResult {
+  PASS
+  FAIL
+  NOT_RUN
+  NOT_APPLICABLE
+}
+
+model Artifact {
+  id              String         @id @default(cuid())
+  runId           String
+  run             Run            @relation(fields: [runId], references: [id], onDelete: Restrict)
+  stepExecutionId String?
+  stepExecution   StepExecution? @relation(fields: [stepExecutionId], references: [id], onDelete: Restrict)
+  /// 역할 또는 SYSTEM(예: 위임 확정 근거)
+  author          ArtifactAuthor
+  /// 예: PRODUCT_SPEC, SCREEN_PLAN, IMPLEMENTATION_PLAN
+  type            String
+  /// 같은 종류를 다시 만들면 증가
+  revision        Int            @default(1)
+  title           String
+  schemaVersion   Int
+  /// 참조한 사양 버전
+  specVersion     Int?
+  /// 작은 산출물의 본문. content와 storageRef 중 하나는 있어야 한다.
+  content         Json?
+  /// 큰 파일의 객체 저장소 참조
+  storageRef      String?
+  checksum        String
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@unique([runId, type, revision])
+}
+
+/// 샌드박스 밖에 보존하는 소스 스냅샷.
+model SourceSnapshot {
+  id              String   @id @default(cuid())
+  runId           String
+  run             Run      @relation(fields: [runId], references: [id], onDelete: Restrict)
+  /// 파일 목록과 체크섬의 해시
+  sourceDigest    String
+  lockfileDigest  String?
+  templateVersion String
+  fileCount       Int
+  storageRef      String
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([runId, sourceDigest])
+}
+
+/// 어떤 사양·소스·배포에 대한 검사인지 고정한 검증 결과.
+model VerificationReport {
+  id             String      @id @default(cuid())
+  runId          String
+  run            Run         @relation(fields: [runId], references: [id], onDelete: Restrict)
+  specVersion    Int
+  sourceDigest   String?
+  commitSha      String?
+  deploymentId   String?
+  deployment     Deployment? @relation(fields: [deploymentId], references: [id], onDelete: Restrict)
+  /// 비밀값이 아닌 환경설정 버전
+  envRevision    String?
+  /// 검사 하네스 버전
+  harnessVersion String
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+
+  items VerificationItem[]
+
+  @@index([runId])
+}
+
+model VerificationItem {
+  id          String             @id @default(cuid())
+  reportId    String
+  report      VerificationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  /// 예: APP-AC-001
+  checkId     String
+  description String
+  result      VerificationResult
+  /// 증거 요약 또는 산출물 ID
+  evidence    String?
+  /// NOT_APPLICABLE이면 근거(필수)
+  reason      String?
+
+  @@unique([reportId, checkId])
+}

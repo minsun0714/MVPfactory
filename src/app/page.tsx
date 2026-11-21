@@ -1,8 +1,4 @@
-"use client";
-import { useProjects } from "@/hooks/useProjects";
-import { ProjectListView } from "@/components/projects/ProjectListView";
-
+import { redirect } from "next/navigation";
 export default function Home() {
-  const { projects, error } = useProjects();
-  return <ProjectListView projects={projects} error={error} />;
+  redirect("/office");
 }

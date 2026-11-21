@@ -1,0 +1,202 @@
+enum RunType {
+  INITIAL
+  REVISION
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  WAITING_CEO
+  PAUSED
+  BLOCKED
+  FAILED
+  SUCCEEDED
+}
+
+enum BlockedReason {
+  CONNECTION_MISSING
+  PERMISSION_DENIED
+  LIMIT_REACHED
+  EXTERNAL_RESULT_UNKNOWN
+  WORKER_UNAVAILABLE
+}
+
+enum JobKind {
+  START
+  RESUME
+  RECOVER
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  WAITING
+  FAILED
+  SKIPPED
+}
+
+/// 최초 생성 또는 수정 한 번의 목표.
+model Run {
+  id                  String         @id @default(cuid())
+  projectId           String
+  project             Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  type                RunType
+  mode                RunMode
+  /// 화면용 요약. 판단의 근거로 쓰지 않는다.
+  status              RunStatus      @default(QUEUED)
+  stageId             String?
+  stageLabel          String?
+  /// Run 시작 시 고정
+  ceoLevel            CeoLevel
+  blockedReason       BlockedReason?
+  /// { stage, message, retryable }. 내부 오류·스택·SQL을 담지 않는다.
+  failure             Json?
+  pauseRequested      Boolean        @default(false)
+  /// REVISION의 피드백 원문
+  feedback            String?
+  /// 접수 당시 Project.projectGeneration. 오래된 실패 Run의 재시도 차단에 사용한다.
+  projectGeneration   Int
+  baseSpecVersion     Int?
+  workflowVersion     String
+  promptVersion       String
+  templateVersion     String?
+  /// 모델 설정. 키·토큰을 담지 않는다.
+  modelConfig         Json
+  /// 시작 시 고정한 RunLimits 사본
+  limits              Json
+  usageModelCalls     Int            @default(0)
+  usageFixAttempts    Int            @default(0)
+  usageActiveSeconds  Int            @default(0)
+  usageWaitingSeconds Int            @default(0)
+  usageCostAmount     Decimal?       @db.Decimal(12, 4)
+  usageCostCurrency   String?
+  /// 마지막 RunEvent.sequence
+  lastSequence        Int            @default(0)
+  /// 보존된 첫 이벤트 순번. 이보다 이전을 요청하면 EVENTS_EXPIRED.
+  eventsRetainedFrom  Int            @default(1)
+  /// 체크포인트 문맥 ID. runId와 일대일이며 재개에도 유지한다.
+  threadId            String         @unique
+  startedAt           DateTime?      @db.Timestamptz(3)
+  finishedAt          DateTime?      @db.Timestamptz(3)
+  createdAt           DateTime       @default(now()) @db.Timestamptz(3)
+
+  jobs          Job[]
+  steps         StepExecution[]
+  decisions     Decision[]
+  artifacts     Artifact[]
+  events        RunEvent[]
+  meetings      Meeting[]
+  usageRecords  UsageRecord[]
+  snapshots     SourceSnapshot[]
+  reports       VerificationReport[]
+  deployments   Deployment[]
+  operations    ExternalOperation[]
+  createdSpecs  ProductSpec[]        @relation("SpecCreatedByRun")
+  activeRunLock ActiveRunLock?
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+/// 작업 공간당 열려 있는 Run을 하나로 제한하는 예약. 기본키가 "하나뿐"을 보장한다.
+model ActiveRunLock {
+  workspaceId String    @id
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  runId       String    @unique
+  run         Run       @relation(fields: [runId], references: [id], onDelete: Restrict)
+  acquiredAt  DateTime  @default(now()) @db.Timestamptz(3)
+}
+
+/// 워커에게 전하는 시작·재개·복구 명령. Job의 DONE은 Run의 완료가 아니다.
+model Job {
+  id         String    @id @default(cuid())
+  runId      String
+  run        Run       @relation(fields: [runId], references: [id], onDelete: Restrict)
+  kind       JobKind
+  status     JobStatus @default(QUEUED)
+  /// 같은 원인의 중복 등록 방지. 예: start:<runId>, resume:<decisionId>
+  dedupeKey  String    @unique
+  /// 복구 명령이 가리키는 원인 Job. 원래 Job을 덮어쓰지 않는다.
+  causeJobId String?
+  causeJob   Job?      @relation("JobCause", fields: [causeJobId], references: [id], onDelete: Restrict)
+  causedJobs Job[]     @relation("JobCause")
+  claimedBy  String?
+  /// 소유권이 바뀔 때마다 증가. 오래된 소유자의 쓰기를 막는다.
+  claimEpoch Int       @default(0)
+  leaseUntil DateTime? @db.Timestamptz(3)
+  attempt    Int       @default(0)
+  notBefore  DateTime? @db.Timestamptz(3)
+  /// 중복·오래된 재개 Job을 아무 일 없이 끝낸 이유
+  noOpReason String?
+  error      String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  startedAt  DateTime? @db.Timestamptz(3)
+  finishedAt DateTime? @db.Timestamptz(3)
+
+  @@index([status, notBefore, createdAt])
+}
+
+/// 특정 입력에 대한 논리 노드 실행.
+model StepExecution {
+  id               String     @id @default(cuid())
+  runId            String
+  run              Run        @relation(fields: [runId], references: [id], onDelete: Restrict)
+  /// 예: W05
+  nodeId           String
+  /// 입력 내용·버전을 정규화한 해시
+  inputFingerprint String
+  attempt          Int
+  status           StepStatus @default(PENDING)
+  errorClass       String?
+  errorMessage     String?
+  startedAt        DateTime?  @db.Timestamptz(3)
+  finishedAt       DateTime?  @db.Timestamptz(3)
+
+  artifacts    Artifact[]
+  usageRecords UsageRecord[]
+
+  @@unique([runId, nodeId, inputFingerprint, attempt])
+}
+
+/// 사용량 원장. Run.usage*는 이 합계의 비정규화 값이다.
+model UsageRecord {
+  id              String         @id @default(cuid())
+  runId           String
+  run             Run            @relation(fields: [runId], references: [id], onDelete: Restrict)
+  stepExecutionId String?
+  stepExecution   StepExecution? @relation(fields: [stepExecutionId], references: [id], onDelete: Restrict)
+  /// MODEL_CALL | FIX_ATTEMPT | ACTIVE_TIME
+  kind            String
+  /// 횟수 또는 초
+  amount          Decimal        @db.Decimal(12, 3)
+  costAmount      Decimal?       @db.Decimal(12, 4)
+  costCurrency    String?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([runId])
+}
+
+/// 중복 요청 방지. 같은 키와 같은 본문은 처음 응답을 그대로 재생한다.
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  /// 예: POST /api/projects
+  scope          String
+  key            String
+  /// 정규화한 본문의 해시. 다르면 IDEMPOTENCY_KEY_REUSED
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt      DateTime @db.Timestamptz(3)
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+}

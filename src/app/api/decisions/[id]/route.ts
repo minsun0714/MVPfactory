@@ -1,17 +1,9 @@
-import { NextResponse } from "next/server";
-import { apiError, readRequestJson } from "@/lib/api";
-import { projects } from "@/server/projects";
+import { getContainer } from "@/server/container";
+import { handle, json, type IdParams } from "@/server/http";
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const { id } = await params;
-    return NextResponse.json(
-      await projects.answer(id, await readRequestJson(request)),
-    );
-  } catch (error) {
-    return apiError(error);
-  }
-}
+export const runtime = "nodejs";
+
+export const GET = (_request: Request, { params }: IdParams) =>
+  handle(async () =>
+    json(await getContainer().decisions.get((await params).id)),
+  );

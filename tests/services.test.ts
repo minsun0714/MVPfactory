@@ -1,11 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { answerDecision } from "../src/services/decisions";
-import {
-  createProject,
-  getProject,
-  getProjects,
-} from "../src/services/projects";
+import { answerDecision } from "@/services/decisions";
+import { createProject, getProject, getProjects } from "@/services/projects";
 
 const fields = {
   name: "프로젝트",
