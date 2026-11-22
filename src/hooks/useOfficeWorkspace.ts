@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { SSE } from "@/contracts/events";
 import { apiPaths } from "@/contracts/paths";
 import type { DecisionSummary, OfficeState, ProjectSummary } from "@/contracts";
-import type { OfficePanel } from "@/hooks/useOfficePreview";
+import type { OfficePanel } from "@/components/office/office-model";
 import { officeApi, officeError } from "@/services/office-api";
 
-export function useOfficeWorkspace() {
+export function useOfficeWorkspace(suspendAutoPanels = false) {
   const [pendingCommands, setPendingCommands] = useState(0);
   useEffect(() => {
     const update = (event: Event) => {
@@ -30,7 +30,9 @@ export function useOfficeWorkspace() {
   const [revision, setRevision] = useState(0);
   const [panel, setPanel] = useState<OfficePanel | "decision">(null);
   const [decisionId, setDecisionId] = useState<string | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [connection, setConnection] = useState<
+    "connecting" | "connected" | "reconnecting"
+  >("connecting");
   const [toast, setToast] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   const refresh = useCallback(() => setRevision((v) => v + 1), []);
@@ -81,7 +83,8 @@ export function useOfficeWorkspace() {
     officeApi
       .state(selectedId, controller.signal)
       .then((data) => {
-        if (!controller.signal.aborted) setSnapshot({ id: selectedId, data });
+        if (controller.signal.aborted) return;
+        setSnapshot({ id: selectedId, data });
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
@@ -109,10 +112,10 @@ export function useOfficeWorkspace() {
     const workspace = new EventSource(apiPaths.workspaceStream);
     workspace.addEventListener(SSE.workspaceEventName, invalidate);
     workspace.onopen = () => {
-      setConnected(true);
+      setConnection("connected");
       invalidate();
     };
-    workspace.onerror = () => setConnected(false);
+    workspace.onerror = () => setConnection("reconnecting");
     // Polling also recovers workspace events lost across reconnects.
     const interval = setInterval(refresh, 15000);
     return () => {
@@ -156,13 +159,13 @@ export function useOfficeWorkspace() {
         )
       : undefined;
   useEffect(() => {
-    if (!candidate || panel !== null) return;
+    if (!candidate || panel !== null || suspendAutoPanels) return;
     const timer = setTimeout(() => {
       setDecisionId(candidate.id);
       setPanel("decision");
     }, 0);
     return () => clearTimeout(timer);
-  }, [candidate, panel]);
+  }, [candidate, panel, suspendAutoPanels]);
   function closePanel() {
     if (panel === "decision" && decisionId) {
       const decision = decisions.find((d) => d.id === decisionId);
@@ -175,6 +178,8 @@ export function useOfficeWorkspace() {
     setDecisionId(null);
   }
   function selectProject(id: string) {
+    if (!projects.some((project) => project.id === id)) return;
+    setMissingProject(false);
     setSelectedId(id);
     closePanel();
     const url = new URL(window.location.href);
@@ -197,7 +202,8 @@ export function useOfficeWorkspace() {
     listError,
     missingProject,
     listLoading,
-    connected,
+    connected: connection === "connected",
+    connection,
     panel,
     decisionId,
     toast,

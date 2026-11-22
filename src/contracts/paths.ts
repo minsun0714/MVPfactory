@@ -32,11 +32,6 @@ export const apiPaths = {
 
   workspaceStream: "/api/stream",
 
-  company: "/api/company",
-  companyCatalog: "/api/company/catalog",
-  companyCharacter: (role: string) => `/api/company/characters/${enc(role)}`,
-  companyOffice: "/api/company/office",
-
   settings: "/api/settings",
   connectionVerify: (provider: string) =>
     `/api/settings/connections/${enc(provider)}/verify`,

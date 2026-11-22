@@ -1,11 +1,6 @@
 "use client";
 import { useId } from "react";
-import type {
-  InputHTMLAttributes,
-  TextareaHTMLAttributes,
-  SelectHTMLAttributes,
-  ReactNode,
-} from "react";
+import type { InputHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 type LabelProps = { label: string; hint?: string; error?: string };
 export function Field({
@@ -81,23 +76,4 @@ export function TextArea({
     </div>
   );
 }
-export function Select({
-  label,
-  children,
-  id,
-  ...props
-}: SelectHTMLAttributes<HTMLSelectElement> & {
-  label: string;
-  children: ReactNode;
-}) {
-  const generated = useId();
-  const fieldId = id ?? generated;
-  return (
-    <div className="pixel-field">
-      <label htmlFor={fieldId}>{label}</label>
-      <select {...props} id={fieldId}>
-        {children}
-      </select>
-    </div>
-  );
-}
+export { Select } from "@/components/ui/Select";

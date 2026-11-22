@@ -7,26 +7,39 @@ import {
   Text,
   Texture,
 } from "pixi.js";
-import type { RoleId } from "@/contracts";
-import {
-  actors,
-  interpolatePoint,
-  SCENE_SIZE,
-} from "@/components/office/scene/model";
-import type { Point, SceneSnapshot } from "@/components/office/scene/model";
+import type { MeetingStatement, RoleId } from "@/contracts";
+import { actors, SCENE_SIZE } from "@/components/office/scene/model";
+import type { SceneSnapshot } from "@/components/office/scene/model";
 import { officeAssetBounds } from "@/components/office/scene/assets";
+
+import { createPixelActor } from "@/components/office/scene/pixel-actor";
+import {
+  createJourney,
+  sampleJourney,
+  seatFacing,
+  deskFacing,
+  walkingDepth,
+  carriesLaptop,
+} from "@/components/office/scene/motion";
+import type { Journey } from "@/components/office/scene/motion";
+import {
+  deskActivity,
+  deskSeatLift,
+  createDeskScreen,
+  createDeskSurface,
+} from "@/components/office/scene/desk-life";
+import { Conversation } from "@/components/office/scene/conversation";
 
 type AssetName = keyof typeof officeAssetBounds;
 type ActorView = {
   container: Container;
-  art: Sprite;
+  rig: ReturnType<typeof createPixelActor>;
   label: Text;
   labelPlate: Graphics;
   marker: Graphics;
-  from: Point;
-  target: Point;
-  progress: number;
+  journey: Journey | null;
   seated: boolean;
+  carryingLaptop: boolean;
 };
 export type OfficeScene = {
   update: (snapshot: SceneSnapshot, reduce: boolean) => void;
@@ -39,6 +52,8 @@ export async function createOfficeScene(
   signal: AbortSignal,
   onRole: (role: RoleId) => void,
   onMeeting: () => void,
+  onPresentation: (statement: MeetingStatement | null) => void,
+  onDelivery: (runId: string | null) => void,
 ): Promise<OfficeScene> {
   if (signal.aborted) throw new DOMException("Aborted", "AbortError");
   const app = new Application();
@@ -50,7 +65,11 @@ export async function createOfficeScene(
   let snapshot: SceneSnapshot | undefined;
   let reduce = false;
   let visible = true;
-  let speechRemaining = 0;
+  const conversation = new Conversation();
+  let presentedKey = "";
+  let delivered: string | null = null;
+  let clock = 0;
+  const screens = new Map<RoleId, ReturnType<typeof createDeskScreen>>();
   const people = new Map<RoleId, ActorView>();
   const world = new Container({ sortableChildren: true });
   const stop = () => app.ticker?.stop();
@@ -96,7 +115,9 @@ export async function createOfficeScene(
     host.appendChild(app.canvas);
     app.stage.addChild(world);
     // Image-backed textures are owned by this scene, not the shared Assets cache.
-    const names = Object.keys(officeAssetBounds) as AssetName[];
+    const names = (Object.keys(officeAssetBounds) as AssetName[]).filter(
+      (name) => !["pm", "planner", "designer", "developer"].includes(name),
+    );
     const entries = await Promise.all(
       names.map(async (name) => {
         const response = await fetch(`/assets/office/layers/${name}.svg`, {
@@ -154,6 +175,10 @@ export async function createOfficeScene(
       art.zIndex = depth;
       world.addChild(art);
     }
+    const deskLaptop = sprite("developer-laptop");
+    deskLaptop.zIndex = 19;
+    deskLaptop.eventMode = "none";
+    world.addChild(deskLaptop);
     const tableHit = new Container({
       eventMode: "static",
       cursor: "pointer",
@@ -169,7 +194,13 @@ export async function createOfficeScene(
     world.addChild(tableHit);
     for (const role of Object.keys(actors) as RoleId[]) {
       const actor = actors[role];
-      const art = sprite(actor.asset);
+      const rig = createPixelActor(role);
+      const screen = createDeskScreen(role);
+      screen.art.zIndex = 19;
+      screens.set(role, screen);
+      const surface = createDeskSurface(role);
+      surface.zIndex = 19;
+      world.addChild(screen.art, surface);
       const person = new Container({
         eventMode: "static",
         cursor: "pointer",
@@ -179,13 +210,9 @@ export async function createOfficeScene(
         actor.x - SCENE_SIZE.originX,
         actor.y - SCENE_SIZE.originY,
       );
-      art.position.set(
-        officeAssetBounds[actor.asset].x - actor.x,
-        officeAssetBounds[actor.asset].y - actor.y,
-      );
       const marker = new Graphics().rect(-18, -116, 36, 4).fill(actor.color);
       marker.visible = false;
-      person.addChild(art, marker);
+      person.addChild(rig.root, marker);
       person.hitArea = new Rectangle(-40, -110, 90, 155);
       person.on("pointertap", () => onRole(role));
       world.addChild(person);
@@ -206,14 +233,13 @@ export async function createOfficeScene(
       world.addChild(labelPlate, label);
       people.set(role, {
         container: person,
-        art,
+        rig,
         label,
         labelPlate,
         marker,
-        from: { x: actor.x, y: actor.y },
-        target: { x: actor.x, y: actor.y },
-        progress: 1,
+        journey: null,
         seated: false,
+        carryingLaptop: false,
       });
     }
     const resize = () => {
@@ -234,54 +260,165 @@ export async function createOfficeScene(
     });
     intersection.observe(host);
     document.addEventListener("visibilitychange", visibility);
+    const publish = (statement: MeetingStatement | null) => {
+      const key = statement
+        ? `${snapshot?.meetingId}:${statement.sequence}:${statement.summary}`
+        : "none";
+      if (key !== presentedKey) {
+        presentedKey = key;
+        onPresentation(statement);
+      }
+    };
     const snap = () => {
-      for (const view of people.values()) {
-        view.progress = 1;
+      if (!snapshot) return;
+      for (const [role, view] of people) {
+        view.journey = null;
+        const target = snapshot.targets[role];
         view.container.position.set(
-          view.target.x - SCENE_SIZE.originX,
-          view.target.y - SCENE_SIZE.originY,
+          target.x - SCENE_SIZE.originX,
+          target.y - SCENE_SIZE.originY,
         );
       }
-      speechRemaining = 0;
       wake();
     };
     app.ticker.add((ticker) => {
       if (!snapshot) return;
+      // A hidden tab must not consume the choreography in one giant delta.
+      const dt = Math.min(ticker.deltaMS, 100);
+      if (!snapshot.paused) clock += dt;
       let moving = false;
-      for (const [role, view] of people) {
-        if (!snapshot.paused && view.progress < 1) {
-          view.progress = reduce
-            ? 1
-            : Math.min(1, view.progress + ticker.deltaMS / 900);
-          moving ||= view.progress < 1;
+      for (const view of people.values()) {
+        if (view.journey) {
+          if (!snapshot.paused) view.journey.elapsed += dt;
+          const pose = sampleJourney(view.journey);
+          view.container.position.set(
+            Math.round(pose.point.x) - SCENE_SIZE.originX,
+            Math.round(pose.point.y) - SCENE_SIZE.originY,
+          );
+          if (pose.phase === "seated") view.journey = null;
+          else moving = true;
         }
-        const point = interpolatePoint(view.from, view.target, view.progress);
-        view.container.position.set(
-          point.x - SCENE_SIZE.originX,
-          point.y - SCENE_SIZE.originY,
-        );
+      }
+      const seated = snapshot.participants.every(
+        (role) => !people.get(role)?.journey,
+      );
+      conversation.tick(dt, seated, snapshot.paused, reduce);
+      publish(seated ? conversation.current : null);
+      let deskLife = false;
+      for (const [role, view] of people) {
+        const delivering = role === "DEVELOPER" && !!snapshot.deliveryRunId;
+        const pose = view.journey ? sampleJourney(view.journey) : null;
+        if (role === "DEVELOPER") {
+          view.carryingLaptop = carriesLaptop(
+            delivering,
+            view.carryingLaptop,
+            pose,
+            !view.seated,
+          );
+          deskLaptop.visible = !view.carryingLaptop;
+        }
+        const point = {
+          x: view.container.x + SCENE_SIZE.originX,
+          y: view.container.y + SCENE_SIZE.originY,
+        };
+        const atDesk = !view.seated && !delivering;
+        const ambient =
+          atDesk && !view.journey
+            ? deskActivity(role, clock, reduce || snapshot.paused)
+            : undefined;
+        deskLife ||= !!ambient && !reduce;
+        const screen = screens.get(role);
+        if (screen) {
+          screen.art.visible = !!ambient;
+          if (ambient) screen.draw(ambient);
+        }
+        const facing =
+          pose?.phase === "walk"
+            ? pose.facing
+            : pose?.phase === "prepare"
+              ? view.seated
+                ? deskFacing(role)
+                : seatFacing(role)
+              : delivering
+                ? "front-left"
+                : view.seated
+                  ? seatFacing(role)
+                  : deskFacing(role);
+        const talking =
+          seated &&
+          !snapshot.paused &&
+          snapshot.status === "IN_PROGRESS" &&
+          conversation.current?.role === role &&
+          conversation.remaining > 0;
+        const reacting =
+          conversation.reaction?.role === role
+            ? conversation.reaction.kind
+            : undefined;
+        const deskLift = deskSeatLift(role);
+        view.rig.root.y = !pose
+          ? atDesk
+            ? -deskLift
+            : 0
+          : pose.phase === "prepare" && view.seated
+            ? -deskLift * (1 - pose.lift)
+            : pose.phase === "settle" && atDesk
+              ? -deskLift * (1 - pose.lift)
+              : 0;
+        view.rig.draw({
+          facing,
+          ambient,
+          standing:
+            delivering && (!pose || pose.phase === "settle")
+              ? 1
+              : (pose?.lift ?? 0),
+          holdingLaptop: view.carryingLaptop,
+          step: pose?.step ?? 0,
+          walking: pose?.phase === "walk",
+          talking: talking && !reduce,
+          beat: reduce ? 0 : Math.floor(clock / 180) % 12,
+          listening: seated && view.seated && !talking,
+          reaction: reduce ? undefined : reacting,
+        });
+        // Remain behind the desk chair during preparation, then enter the aisle.
         view.container.zIndex =
-          view.progress < 1
-            ? 50
-            : view.seated
-              ? view.target.y < 550
+          pose?.phase === "prepare"
+            ? view.seated
+              ? actors[role].depth
+              : point.y < 550
                 ? 31
                 : 33
-              : actors[role].depth;
+            : pose?.phase === "walk"
+              ? walkingDepth(point)
+              : delivering
+                ? 40
+                : atDesk
+                  ? actors[role].depth
+                  : point.y < 550
+                    ? 31
+                    : 33;
         view.label.position.set(
           view.container.x,
-          view.container.y + (view.seated && view.target.y < 550 ? -126 : 30),
+          view.container.y + (point.y < 550 && view.seated ? -136 : 30),
         );
         view.labelPlate.position.copyFrom(view.label.position);
-        view.marker.visible = snapshot.speaker === role && view.seated;
-        view.marker.alpha =
-          !reduce && speechRemaining > 0 && !snapshot.paused
-            ? 0.7 + 0.3 * Math.sin(speechRemaining / 110)
-            : 1;
+        view.label.visible = view.labelPlate.visible = !view.journey;
+        view.marker.visible =
+          seated && view.seated && conversation.current?.role === role;
+        view.marker.alpha = 1;
       }
-      if (!snapshot.paused)
-        speechRemaining = Math.max(0, speechRemaining - ticker.deltaMS);
-      if ((!moving && (speechRemaining === 0 || reduce)) || snapshot.paused)
+      const delivery =
+        snapshot.deliveryRunId && !people.get("DEVELOPER")?.journey
+          ? snapshot.deliveryRunId
+          : null;
+      if (delivery !== delivered) {
+        delivered = delivery;
+        onDelivery(delivery);
+      }
+      app.ticker.maxFPS = moving || conversation.active ? 30 : 12;
+      if (
+        snapshot.paused ||
+        (!moving && !deskLife && (!conversation.active || reduce))
+      )
         stop();
     });
     return {
@@ -290,23 +427,32 @@ export async function createOfficeScene(
       update(next, reduceMotion) {
         if (disposed) return;
         const first = !snapshot || snapshot.projectId !== next.projectId;
-        if (snapshot && next.speakerSequence > snapshot.speakerSequence)
-          speechRemaining = 900;
         reduce = reduceMotion;
+        conversation.sync(next, first);
         for (const [role, view] of people) {
+          if (first)
+            view.carryingLaptop = role === "DEVELOPER" && !!next.deliveryRunId;
           const target = next.targets[role];
-          if (target.x !== view.target.x || target.y !== view.target.y) {
-            view.from = {
-              x: view.container.x + SCENE_SIZE.originX,
-              y: view.container.y + SCENE_SIZE.originY,
-            };
-            view.target = target;
-            view.progress = 0;
+          const previous = snapshot?.targets[role];
+          if (!previous || target.x !== previous.x || target.y !== previous.y) {
+            view.journey = createJourney(
+              role,
+              {
+                x: view.container.x + SCENE_SIZE.originX,
+                y: view.container.y + SCENE_SIZE.originY,
+              },
+              next.participants.includes(role) ||
+                (role === "DEVELOPER" && !!next.deliveryRunId),
+              role === "DEVELOPER" && next.deliveryRunId ? target : undefined,
+            );
           }
-          view.seated = next.participants.includes(role);
+          view.seated =
+            next.participants.includes(role) ||
+            (role === "DEVELOPER" && !!next.deliveryRunId);
         }
         snapshot = next;
         if (first || reduce) snap();
+        if (!next.participants.length) publish(null);
         wake();
       },
     };

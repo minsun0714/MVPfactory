@@ -10,7 +10,7 @@ CEO가 되어 가상의 사무실 공간에 있는 멀티 에이전트와 프로
 
 사용자가 **아이디어**와 **자신이 얼마나 관여할지(CEO 개입 수준)** 를 입력하면, 가상의 제품팀(PM·기획자·디자이너·개발자 에이전트)이 기획부터 검증까지 진행한다. 결과물은 사용자의 GitHub 저장소와 Vercel에 배포된 작은 Next.js 웹앱이다. 데이터 저장이 필요하면 DB도 자동으로 만든다. 배포 뒤에는 피드백을 줘서 같은 프로젝트를 고쳐 다시 배포할 수 있다.
 
-사용자는 픽셀아트 사무실에서 캐릭터를 꾸미고, 팀이 회의하며 일하는 모습을 지켜본다. 이 가상 회사 경험도 첫 MVP의 필수 범위다.
+사용자는 고정 디자인의 픽셀아트 사무실에서 팀이 회의하며 일하는 모습을 지켜본다. 사용자 꾸미기·사무실 확장·배치 편집 기능은 제공하지 않는다.
 
 ```mermaid
 flowchart LR
@@ -28,7 +28,8 @@ flowchart LR
 - **서버:** `src/app/api`의 API(구현 현황은 [API.md](docs/API.md) §14), 업무 계층(`src/domain`, `src/application`, `src/infrastructure`, `src/server`), DB 스키마와 마이그레이션(`prisma/schema/`), 화면·서버 공용 타입(`src/contracts`)이 있습니다.
 - **화면:** `src/app`, `src/components`, `src/hooks`, `src/services`는 초기 데모 때의 화면이며 새 API 계약에 맞춰 다시 만들어야 합니다.
 - **워커:** `npm run worker`가 데모 실행을 진행합니다(CEO 레벨별 검토, 회의 기록, 재시작 복구). 산출물은 입력한 아이디어로 만든 예시이며 실제 AI가 만든 것이 아닙니다. 자세한 동작은 [API.md](docs/API.md) §15입니다.
-- **없는 것:** 실제 LLM·샌드박스, 외부 연동(GitHub, Vercel, Supabase), 검증 하네스.
+- **실제 실행(부분, 모의 모델로만 검증):** `.env`에 `LLM_API_KEY`·`LLM_MODEL`이 있으면 워커가 REAL Run을 처리합니다. OpenAI가 범위·기획·화면·회의 발언을 만들고, 로그인된 Codex CLI가 코드 작성·수정을 담당합니다. Docker 샌드박스에서 설치·빌드·테스트하며 실패하면 한도 안에서 Codex에 수정을 요청합니다. 합격한 소스는 `.data/source-snapshots`에 보존합니다. 모델 호출은 Run의 한도와 사용량에 기록됩니다. **실제 OpenAI(gpt-5.4)로 기획부터 빌드·테스트 통과까지 한 번 확인했습니다(테스트 DB).** 마무리 단계는 GitHub 반영(`src/application/github.ts`)과 Vercel 배포(`src/application/vercel.ts`, `src/application/release.ts`)를 거칩니다. 대상 계정과 저장소 공개 범위는 공통 설정에서 읽고, 외부 작업 원장으로 중복 생성을 막습니다. GitHub는 실제 계정에서 저장소 생성과 커밋을 확인했고, Vercel도 실제 계정에서 배포·운영 주소 접속·중복 방지를 확인했습니다. 운영 주소가 200으로 열려야 Run이 성공하며, 요구사항별 검증(APP-AC)이 없어 결과 화면의 제품 상태는 미검증으로 남습니다. 데이터 저장이 필요한 앱은 공용 Supabase 프로젝트 안의 앱 전용 스키마를 쓰며(선언형 데이터 계획 → 검토된 SQL 컴파일러, RLS), 이 부분은 로컬 PostgreSQL로만 검증했고 실제 Supabase에서는 아직 확인하지 않았습니다. 사용하려면 `docker pull node:22-slim`이 필요합니다.
+- **없는 것:** 외부 연동(GitHub, Vercel, Supabase), 요구사항 단위 검증(APP-AC), 실제 모델 호출 검증.
 - **미연결:** LLM, 생성 앱 Supabase DB, GitHub, Vercel.
 - **작업 계획:** [TASKS.md](TASKS.md)와 `tasks/` 폴더, 목록은 `npm run tasks`로 봅니다.
 
@@ -158,7 +159,7 @@ DATABASE_URL="<DATABASE_URL에서 DB 이름만 mvpfactory_test로 바꾼 주소>
 | 결정 (Decision)    | 팀이 CEO에게 하는 검토 요청 하나와 그 응답                                                                            |
 | 공통 설정          | GitHub·Vercel·DB 계정과 기본 대상·한도를 미리 등록해 두는 곳. 새 프로젝트가 이를 재사용한다                           |
 | 작업 공간          | 로그인 없이 쓰는 단일 사용자 공간. 프로젝트와 공통 설정, 가상 회사 설정이 속한다                                      |
-| 지원 범위          | 첫 MVP가 만들 수 있는 앱의 범위. 작은 개인용 웹 도구, 화면 1~3개, 로그인 없음                                         |
+| 지원 범위          | 첫 MVP가 만들 수 있는 앱의 범위. 작은 개인용 웹 도구, 화면 1~3개, 로그인·회원가입·OAuth 제외                     |
 | 가상 회사          | 캐릭터, 사무실, 회의 장면으로 팀의 작업을 보여 주는 화면                                                              |
 
 ### 상태와 완료
@@ -197,3 +198,26 @@ DATABASE_URL="<DATABASE_URL에서 DB 이름만 mvpfactory_test로 바꾼 주소>
 | 선언형 스키마 계획    | AI가 SQL을 직접 쓰지 않고 "이런 테이블·필드"를 선언하면, 검토된 코드가 SQL로 바꾸는 방식 |
 | RLS                   | DB가 행 단위로 접근을 제한하는 기능(Row Level Security)                                  |
 | 후보 배포 → 게시      | 배포를 먼저 후보로 만들어 검증한 뒤, 사용자에게 공개하는 2단계 방식                      |
+
+### 생성 앱 Supabase 토큰
+
+`SUPABASE_ACCESS_APP_TOKEN`은 생성 앱 DB의 연결 확인·실행 준비 검사·관리 API 호출에서 공통으로 사용한다. `SUPABASE_PROJECT_REF`는 생성 앱 데이터가 저장되는 Supabase 프로젝트를 지정한다. 기존 `SUPABASE_ACCESS_TOKEN`으로 자동 대체하지 않는다. 팩토리 자체 DB 연결은 `DATABASE_URL`을 사용한다. 토큰을 바꾼 뒤 웹 서버와 워커를 재시작하고 설정에서 Supabase 연결 확인을 다시 실행한다.
+
+### Codex 개발자 실행
+
+생성 앱의 로그인·회원가입·OAuth는 현재 지원하지 않습니다. 인증 없이 사용할 수 있는 앱만 생성합니다. 기획자는 `인증필요`를 boolean으로 선언하며 true이면 개발 전에 중단합니다. 비공개 데이터 요구를 공개 데이터로 바꾸지 않습니다. 이 검사는 모델의 필요성 판단에 의존하며, 실제 생성 소스에 인증이 전혀 없음을 증명하는 검사는 아닙니다. 기존 배포 앱은 자동 변경하지 않습니다.
+
+생성 앱 DB의 현재 접근 계획은 비인증 방문자용입니다. `access`는 `read`, `insert`, `update`, `delete`에 boolean을 사용하며 생략된 동작은 거부합니다. 모든 동작이 명시적으로 false인 계획은 형식 오류로 재시도하지 않고 인증·사용자별 정책 구현이 필요하다고 안내합니다. 비공개 데이터를 공개로 전환하거나 localStorage로 대신하지 않습니다.
+
+코드 작성·수정은 `codex exec`로 실행합니다. OpenAI Chat Completions는 PM·기획·설계·회의에만 연결됩니다. Codex가 없거나 실패하면 OpenAI 코드 생성으로 대체하지 않습니다.
+
+- 워커를 실행하는 OS 계정에서 Codex CLI 0.171.0 이상을 설치하고 `codex login`, `codex login status`로 로그인 상태를 확인합니다. 기존 ChatGPT 로그인을 재사용하며 팩토리 API 키를 넘기지 않습니다.
+- 필요하면 `.env`에 `CODEX_CLI_PATH`와 `CODEX_MODEL`을 지정합니다. 비어 있으면 PATH의 `codex`와 CLI 기본 모델을 사용합니다. 사용자 config.toml·규칙·외부 MCP·플러그인은 로드하지 않습니다. 팩토리가 제공하는 앱 폴더 전용 파일 도구만 연결합니다.
+- Codex는 임시 앱 작업 폴더에 파일 도구로 직접 파일을 작성합니다. 이 도구는 해당 폴더 내부 소스의 읽기·쓰기·삭제만 허용하며 경로 이탈·링크·환경 파일·에이전트 설정을 거부합니다. 제한된 파일 접근 프로필과 승인 불허 정책을 사용하며 셸·브라우저·커넥터 도구는 끕니다. 설치·빌드·테스트는 기존 Docker 컨테이너에서 수행하고 실패 근거를 다음 Codex 수정 요청에 전달합니다. 생성 앱에는 localStorage/sessionStorage 저장을 허용하지 않습니다.
+- CLI 호출 하나를 개발 작업 1회로 모델 호출 한도에 포함하고 완료 이벤트의 토큰 사용량을 기록합니다. CLI 내부의 개별 모델 호출 수와 ChatGPT 구독 비용은 추정하지 않으며 OpenAI API 단가도 적용하지 않습니다. 따라서 비용 한도는 Codex 구독 사용량의 금액 상한이 아닙니다. 시간 제한과 자동 수정 횟수는 별도로 적용합니다.
+- 합격한 파일은 기존 소스 스냅샷·배포 흐름으로 전달됩니다. 임시 작업 폴더는 성공·실패 후 삭제됩니다. 현재 형식 재시도는 저장된 소스/단계 기준이며 Codex 대화 세션을 resume하지 않습니다.
+- 변경 후 기존 워커를 종료하고 `npm run worker`로 재시작해야 적용됩니다.
+
+실제 CLI와 Docker 연결만 검사하려면 `node --import tsx scripts/verify-codex.ts`를 실행합니다. **Codex 사용량이 발생**하며 팩토리 DB·GitHub·Vercel은 변경하지 않습니다. 선택 환경변수를 읽으려면 `node --env-file=.env --import tsx scripts/verify-codex.ts`를 사용합니다.
+
+Codex 연결 실검증(2026-11-21): ChatGPT 로그인된 CLI 0.171.0으로 계산기 소스 7개 작성 → Docker 설치·Next.js 빌드·Vitest 4개 통과. 실제 Codex 수정과 외부 게시까지의 전체 실행은 별도 미검증입니다.

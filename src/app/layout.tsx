@@ -1,6 +1,5 @@
 import { ToastHost } from "@/components/ui/ToastHost";
 import type { Metadata } from "next";
-import Link from "next/link";
 import "@/app/globals.css";
 
 export const metadata: Metadata = {
@@ -15,18 +14,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body>
-        <header>
-          <nav>
-            <Link href="/">MVP 팩토리</Link>
-            <Link href="/new">새 프로젝트</Link>
-          </nav>
-        </header>
-        <main>
-          <div className="notice">
-            데모 실행 — 실제 AI 생성 및 외부 배포는 수행하지 않습니다
-          </div>
-          {children}
-        </main>
+        <main>{children}</main>
         <ToastHost />
       </body>
     </html>

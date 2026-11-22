@@ -3,7 +3,6 @@ import type { SVGProps } from "react";
 const paths = {
   office: "M3 3h10v10H3z M6 13V9h4v4 M6 6h1 M9 6h1",
   projects: "M2 4h5l2 2h5v7H2z M2 4V2h5l2 2",
-  palette: "M4 2h8v2h2v6h-4v4H4v-2H2V4h2z M5 5h1 M9 5h1 M5 9h1",
   settings: "M6 1h4v3h3v2h2v4h-3v3h-2v2H6v-3H3v-2H1V6h3V3h2z M6 6h4v4H6z",
   bell: "M6 2h4v2h2v6h2v2H2v-2h2V4h2z M6 14h4",
   close: "M3 3l10 10 M13 3L3 13",

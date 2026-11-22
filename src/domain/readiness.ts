@@ -23,12 +23,23 @@ export type RequirementFacts = {
   unverifiedConnection: string | null;
   /** 설정이 필요한 값(예: 실행 한도) */
   missingSettings: string[];
+  /** 어댑터 코드는 있어도 지금 쓸 수 없는 이유(예: Docker가 꺼져 있음). 사용자가 할 일을 담은 문장 */
+  runtimeProblems?: string[];
+  /**
+   * 값이 있으면 이 항목은 실행 시작의 필수 조건이 아니다(그 이유). 준비되지 않아도 시작을 막지 않으며,
+   * 이 항목이 필요한 작업은 그 작업 단계에서 따로 막는다.
+   */
+  optionalBecause?: string;
 };
 
 export type RequirementState = {
   id: RequirementId;
   label: string;
   ready: boolean;
+  /** 실행 시작에 꼭 필요한 항목인지 */
+  required: boolean;
+  /** 필수가 아닌 이유 */
+  note: string | null;
   blockers: string[];
 };
 
@@ -49,6 +60,7 @@ function blockersOf(facts: RequirementFacts): string[] {
   if (facts.unverifiedConnection) blockers.push(facts.unverifiedConnection);
   for (const setting of facts.missingSettings)
     blockers.push(`${setting} 설정 필요`);
+  for (const problem of facts.runtimeProblems ?? []) blockers.push(problem);
   return blockers;
 }
 
@@ -61,10 +73,12 @@ export function evaluateReadiness(
       id: item.id,
       label: item.label,
       ready: blockers.length === 0,
+      required: item.optionalBecause === undefined,
+      note: item.optionalBecause ?? null,
       blockers,
     };
   });
-  const missing = requirements.filter((item) => !item.ready);
+  const missing = requirements.filter((item) => item.required && !item.ready);
   if (missing.length === 0)
     return { available: true, reason: null, requirements };
   const summary = missing

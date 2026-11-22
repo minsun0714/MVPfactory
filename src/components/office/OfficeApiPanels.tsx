@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Field";
 import { Badge, Card, EmptyState } from "@/components/ui/Status";
 import { Tabs } from "@/components/ui/Tabs";
+import { ArtifactContent } from "@/components/office/ArtifactContent";
 
 export function QueryNotice({
   loading,
@@ -277,11 +278,7 @@ export function RoleApiPanel({
           {artifact.data ? (
             <div>
               <h3>{artifact.data.title}</h3>
-              <pre className="office-artifact">
-                {artifact.data.content
-                  ? JSON.stringify(artifact.data.content, null, 2)
-                  : "본문이 없는 산출물입니다."}
-              </pre>
+              <ArtifactContent content={artifact.data.content} />
               {safeUrl(artifact.data.downloadUrl) && (
                 <a
                   href={safeUrl(artifact.data.downloadUrl)}

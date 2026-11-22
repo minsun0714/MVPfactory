@@ -101,6 +101,11 @@ export type ArtifactSummary = {
   createdAt: IsoDateTime;
 };
 
+/** 산출물 본문에서 여러 항목을 한 문자열로 이을 때 쓰는 구분자. 화면은 이 값으로 목록을 다시 나눈다 */
+export const ARTIFACT_LIST_SEPARATOR = " · ";
+/** 산출물에 함께 저장하는 구조화 문서(JSON 문자열)의 키. 화면은 문장 항목만 보여 주고 이 값은 원본 보기에서만 드러낸다 */
+export const ARTIFACT_STRUCTURE_KEY = "구조";
+
 export type Artifact = ArtifactSummary & {
   /** 작은 산출물은 본문을 포함한다 */
   content: Record<string, unknown> | null;

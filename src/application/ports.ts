@@ -5,8 +5,6 @@
 import type {
   Artifact,
   ArtifactSummary,
-  CharacterAppearance,
-  Company,
   Connection,
   CreateProjectRequest,
   Decision,
@@ -15,14 +13,12 @@ import type {
   Health,
   Meeting,
   MeetingSummary,
-  OfficeLayout,
   OfficeState,
   Page,
   Project,
   ProjectSummary,
   Provider,
   Result,
-  RoleId,
   Run,
   RunEvent,
   Settings,
@@ -106,17 +102,6 @@ export interface OfficeRepository {
   /** Run이 없으면 null */
   meetings(runId: string): Promise<MeetingSummary[] | null>;
   meeting(id: string): Promise<Meeting | null>;
-}
-
-export interface CompanyRepository {
-  get(): Promise<Company>;
-  /** 저장된 버전이 `version`과 다르면 `VERSION_CONFLICT`를 던진다. */
-  updateCharacter(
-    role: RoleId,
-    version: number,
-    appearance: CharacterAppearance,
-  ): Promise<Company>;
-  updateOffice(version: number, layout: OfficeLayout): Promise<Company>;
 }
 
 export interface SettingsRepository {

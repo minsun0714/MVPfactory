@@ -1,6 +1,5 @@
 /** 오류 계약. 기준 문서: docs/API.md §2 */
 import type { ScopeGap } from "@/contracts/projects";
-import type { Company } from "@/contracts/company";
 
 export const ERROR_CODES = [
   "VALIDATION_FAILED",
@@ -14,7 +13,6 @@ export const ERROR_CODES = [
   "RUN_PAUSED",
   "INVALID_RUN_STATE",
   "STALE_GENERATION",
-  "VERSION_CONFLICT",
   "EVENTS_EXPIRED",
   "UNSUPPORTED_MEDIA_TYPE",
   "UNSUPPORTED_SCOPE",
@@ -38,7 +36,6 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   RUN_PAUSED: 409,
   INVALID_RUN_STATE: 409,
   STALE_GENERATION: 409,
-  VERSION_CONFLICT: 409,
   EVENTS_EXPIRED: 410,
   UNSUPPORTED_MEDIA_TYPE: 415,
   UNSUPPORTED_SCOPE: 422,
@@ -53,7 +50,6 @@ export interface ApiErrorDetailsMap {
   VALIDATION_FAILED: { fields: { field: string; message: string }[] };
   ACTIVE_RUN_EXISTS: { runId: string };
   PROPOSAL_VERSION_MISMATCH: { latestVersion: number };
-  VERSION_CONFLICT: { latest: Company };
   UNSUPPORTED_SCOPE: { gaps: ScopeGap[] };
 }
 

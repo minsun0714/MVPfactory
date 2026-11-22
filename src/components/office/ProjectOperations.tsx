@@ -21,6 +21,9 @@ import { useRunControl } from "@/hooks/useRunControl";
 import { Button } from "@/components/ui/Button";
 import { Select, TextArea } from "@/components/ui/Field";
 import { Card, Badge } from "@/components/ui/Status";
+import { PixelIcon } from "@/components/ui/PixelIcon";
+import { ArtifactContent } from "@/components/office/ArtifactContent";
+import { RunStatusBadge, runTones } from "@/components/office/RunStatusBadge";
 import {
   QueryNotice,
   MeetingApiPanel,
@@ -71,19 +74,27 @@ export function ProjectOperations({
       <QueryNotice {...ui.project} retry={ui.project.reload} />
       {p && (
         <>
-          <div className="execution-heading">
-            <div>
+          <header className="execution-heading">
+            <div className="execution-title-row">
               <h1>{p.name}</h1>
-              <p className="execution-idea">{p.idea}</p>
+              {/* 진행 중인 실행은 아래 상태 카드가 상태를 보여 주므로 중복 표시하지 않는다. */}
+              {(p.archived ||
+                !p.latestRun ||
+                p.latestRun.status === "SUCCEEDED") &&
+                (p.latestRun && !p.archived ? (
+                  <RunStatusBadge
+                    status={p.latestRun.status}
+                    label={runStatusLabels[p.latestRun.status]}
+                  />
+                ) : (
+                  <Badge>{p.archived ? "보관된 프로젝트" : "시작 전"}</Badge>
+                ))}
             </div>
-            <Badge>
-              {p.archived
-                ? "보관된 프로젝트"
-                : p.latestRun
-                  ? runStatusLabels[p.latestRun.status]
-                  : "시작 전"}
-            </Badge>
-          </div>
+            <div className="execution-idea">
+              <span className="execution-idea-label">아이디어</span>
+              <p>{p.idea}</p>
+            </div>
+          </header>
           {(p.hasLiveApp ||
             (p.latestRun &&
               ["SUCCEEDED", "FAILED"].includes(p.latestRun.status))) && (
@@ -120,8 +131,23 @@ export function ProjectOperations({
           ) : (
             ui.canRevise && (
               <>
-                <div className="pixel-wrap">
-                  <Button onClick={() => setRevising(true)}>수정 요청</Button>
+                <div className="execution-next">
+                  <p>
+                    고칠 부분이 있으면 수정 요청을 보내 주세요. 같은 앱과
+                    데이터를 이어서 고쳐요.
+                  </p>
+                  <div className="execution-next-actions">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setRevising(true)}
+                    >
+                      <PixelIcon name="chat" width="18" height="18" />
+                      수정 요청
+                    </Button>
+                    {p.latestRun?.status === "SUCCEEDED" && (
+                      <HistoryLink projectId={id} />
+                    )}
+                  </div>
                 </div>
                 <Dialog
                   open={revising}
@@ -160,24 +186,16 @@ export function ProjectOperations({
           <CommandNotice command={ui.command} />
           {p.latestRun && (
             <>
-              {!["SUCCEEDED"].includes(p.latestRun.status) && (
+              {p.latestRun.status !== "SUCCEEDED" ? (
                 <RunOperations
                   id={p.latestRun.id}
                   revision={revision}
                   refresh={ui.reload}
                   compact
                 />
+              ) : (
+                !ui.canRevise && <HistoryLink projectId={id} />
               )}
-              <div className="pixel-wrap">
-                <Link href={`/projects/${encodeURIComponent(id)}/history`}>
-                  작업 기록 보기
-                </Link>
-                {!["SUCCEEDED", "FAILED"].includes(p.latestRun.status) && (
-                  <Link href={`/office?project=${encodeURIComponent(id)}`}>
-                    사무실에서 진행 보기
-                  </Link>
-                )}
-              </div>
             </>
           )}
         </>
@@ -279,32 +297,60 @@ function RunOperations({
     refresh();
   });
   const r = run.data;
+  const officeHref = r
+    ? `/office?project=${encodeURIComponent(r.projectId)}`
+    : "/office";
   return (
     <div className="pixel-stack">
       <QueryNotice {...run} retry={run.reload} />
       {r && (
-        <>
-          <div className="pixel-wrap">
-            <Badge>{runStatusLabels[r.status]}</Badge>
-            <span className="pixel-muted">
-              {r.mode === "DEMO" ? "과거 데모 기록" : "앱 생성 실행"}
-            </span>
+        <section
+          className="execution-run-card run-status"
+          data-tone={runTones[r.status]}
+          aria-label="현재 실행"
+        >
+          <div className="execution-run-top">
+            <RunStatusBadge
+              status={r.status}
+              label={runStatusLabels[r.status]}
+            />
+            {r.mode === "DEMO" && <Badge>과거 데모 기록</Badge>}
           </div>
-          <p>
-            {r.failure?.message ??
-              (r.blockedReason
-                ? blockedLabels[r.blockedReason]
-                : (r.stage?.label ?? runDescriptions[r.status]))}
-          </p>
-          {r.status === "WAITING_CEO" && (
-            <Link href={`/office?project=${encodeURIComponent(r.projectId)}`}>
-              사무실에서 제안 검토하기
-            </Link>
+          {r.stage && r.status !== "SUCCEEDED" && (
+            <p className="run-stage execution-run-stage">
+              <span className="run-stage-label">현재 단계</span>
+              <strong>{r.stage.label}</strong>
+            </p>
+          )}
+          {r.failure || r.blockedReason ? (
+            <p role="alert" className="execution-run-problem">
+              {r.failure?.message ??
+                (r.blockedReason ? blockedLabels[r.blockedReason] : "")}
+            </p>
+          ) : (
+            <p className="execution-run-description">
+              {runDescriptions[r.status]}
+            </p>
           )}
           {r.pauseRequested && (
-            <p role="status">안전한 지점에서 정지하기를 기다리고 있습니다.</p>
+            <p role="status" className="pixel-muted">
+              안전한 지점에서 정지하기를 기다리고 있습니다.
+            </p>
           )}
-          <div className="pixel-wrap">
+          <div className="execution-run-actions">
+            {compact && r.status === "WAITING_CEO" && (
+              <Link className="pixel-button" href={officeHref}>
+                사무실에서 제안 검토하기
+                <PixelIcon name="arrow" width="18" height="18" />
+              </Link>
+            )}
+            {compact &&
+              !["WAITING_CEO", "SUCCEEDED", "FAILED"].includes(r.status) && (
+                <Link className="pixel-button" href={officeHref}>
+                  사무실에서 진행 보기
+                  <PixelIcon name="arrow" width="18" height="18" />
+                </Link>
+              )}
             {(["pause", "resume", "retry"] as const)
               .filter((action) =>
                 r.mode === "DEMO"
@@ -319,7 +365,7 @@ function RunOperations({
               .map((action) => (
                 <Button
                   key={action}
-                  variant="secondary"
+                  variant={action === "retry" ? "primary" : "secondary"}
                   disabled={
                     command.pending ||
                     (action === "pause"
@@ -341,7 +387,8 @@ function RunOperations({
                 </Button>
               ))}
           </div>
-        </>
+          {compact && <HistoryLink projectId={r.projectId} />}
+        </section>
       )}
       <CommandNotice command={command} />
       {!compact && (
@@ -380,23 +427,30 @@ function RunOperations({
           {tab === "artifacts" && (
             <section className="pixel-stack">
               <QueryNotice {...artifacts} retry={artifacts.reload} />
-              {artifacts.data?.items.map((a) => (
-                <Button
-                  variant="secondary"
-                  key={a.id}
-                  onClick={() => setArtifactId(a.id)}
-                >
-                  {a.author} · {a.title}
-                </Button>
-              ))}
+              {!!artifacts.data?.items.length && (
+                <ul className="artifact-picker" aria-label="산출물 목록">
+                  {artifacts.data.items.map((a) => (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        aria-pressed={artifactId === a.id}
+                        onClick={() => setArtifactId(a.id)}
+                      >
+                        <span className="artifact-picker-author">
+                          {authorLabels[a.author]}
+                        </span>
+                        {a.title}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {artifacts.data?.items.length === 0 && <p>산출물이 없습니다.</p>}
               <QueryNotice {...artifact} retry={artifact.reload} />
               {artifact.data && (
                 <Card>
                   <h4>{artifact.data.title}</h4>
-                  <pre className="office-artifact">
-                    {JSON.stringify(artifact.data.content, null, 2)}
-                  </pre>
+                  <ArtifactContent content={artifact.data.content} />
                   <SafeLink url={artifact.data.downloadUrl}>다운로드</SafeLink>
                 </Card>
               )}
@@ -461,6 +515,26 @@ function RunOperations({
   );
 }
 
+function HistoryLink({ projectId }: { projectId: string }) {
+  return (
+    <Link
+      className="execution-history-link"
+      href={`/projects/${encodeURIComponent(projectId)}/history`}
+    >
+      작업 기록 보기
+      <PixelIcon name="arrow" width="16" height="16" />
+    </Link>
+  );
+}
+
+const authorLabels = {
+  PM: "PM",
+  PLANNER: "기획자",
+  DESIGNER: "디자이너",
+  DEVELOPER: "개발자",
+  SYSTEM: "시스템",
+};
+
 const blockedLabels = {
   CONNECTION_MISSING: "계정 연결을 확인해주세요.",
   PERMISSION_DENIED: "연결 계정의 권한을 확인해주세요.",
@@ -503,7 +577,7 @@ export function ProjectRunHistory({
           <Select
             label="실행 선택"
             value={ui.runId}
-            onChange={(e) => ui.setSelectedRun(e.target.value)}
+            onValueChange={(value) => ui.setSelectedRun(value)}
           >
             {ui.runs.data?.items.map((r) => (
               <option key={r.id} value={r.id}>

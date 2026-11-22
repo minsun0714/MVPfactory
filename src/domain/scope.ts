@@ -6,22 +6,43 @@ import type {
 
 type Rule = { pattern: RegExp; gap: ScopeGap };
 
-/** "로그인 없이"처럼 부정하는 표현은 제외한다. */
-const NOT_NEGATED = String.raw`(?!\s*(없|불필요|필요\s*없|제외))`;
+export class UnsupportedAuthenticationError extends Error {
+  /** @param evidence 인증이 필요하다고 본 근거(대표 입력에서 그대로 옮긴 문장) */
+  constructor(readonly evidence?: string) {
+    super(
+      [
+        evidence
+          ? `대표님 입력의 "${evidence}" 때문에 로그인·계정·사용자별 비공개 데이터가 필요하다고 판단했어요.`
+          : "",
+        "로그인·회원가입·OAuth·사용자별 비공개 데이터는 현재 생성 범위 밖이에요. 인증이 필요한 요구를 없애거나 데이터를 공개하지 않고 중단했어요.",
+        evidence
+          ? "로그인 없이 써도 된다면 그 요구를 빼고 다시 시작해 주세요."
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    this.name = "UnsupportedAuthenticationError";
+  }
+}
+
+/** 키워드 사전 안내용이다. 최종 판단은 기획자의 명시적인 인증 필요성 선언으로 한다. */
+function mentionsAuthentication(value: string): boolean {
+  const auth =
+    "(?:로그인|회원가입|회원 가입|OAuth|소셜 로그인|login|sign[ -]?up)";
+  const withoutExclusions = value
+    .replace(
+      new RegExp(
+        `${auth}(?:\\s*(?:과|와|및|[·,/])\\s*${auth})*\\s*(?:은|는|을|를)?\\s*(?:없이|없는|불필요|제외|안\\s*(?:만들|넣|쓰|함)|하지\\s*않)`,
+        "gi",
+      ),
+      "",
+    )
+    .replace(/(?:no|without)\s+(?:login|sign[ -]?up|oauth)/gi, "");
+  return new RegExp(auth, "i").test(withoutExclusions);
+}
 
 const RULES: Rule[] = [
-  {
-    pattern: new RegExp(
-      String.raw`(로그인|회원\s*가입|소셜\s*로그인|사용자\s*계정)${NOT_NEGATED}`,
-    ),
-    gap: {
-      requirement: "로그인·회원가입",
-      reason:
-        "이번 MVP는 생성 앱의 로그인과 사용자별 데이터 분리를 지원하지 않습니다.",
-      alternative:
-        "로그인 없이 모두가 같은 데이터를 쓰는 앱으로 범위를 줄입니다.",
-    },
-  },
   {
     pattern: /(결제|구독\s*결제|stripe|payment)/i,
     gap: {
@@ -78,5 +99,13 @@ export function checkScope(input: ScopeCheckRequest): ScopeCheckResult {
   const gaps = RULES.filter((rule) => rule.pattern.test(haystack)).map(
     (rule) => rule.gap,
   );
+  if (mentionsAuthentication(haystack))
+    gaps.push({
+      requirement: "로그인·회원가입·OAuth",
+      reason:
+        "생성 앱의 인증과 사용자별 비공개 데이터는 현재 지원하지 않습니다.",
+      alternative:
+        "인증 없이 사용해도 되는 기능으로 직접 범위를 조정해 주세요. 비공개 데이터를 자동으로 공개하지 않습니다.",
+    });
   return { supported: gaps.length === 0, gaps };
 }

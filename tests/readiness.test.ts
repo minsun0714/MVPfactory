@@ -107,59 +107,86 @@ async function withEnv<T>(
 
 const NO_KEYS = {
   LLM_API_KEY: undefined,
+  LLM_MODEL: undefined,
   GITHUB_TOKEN: undefined,
   VERCEL_TOKEN: undefined,
-  SUPABASE_ACCESS_TOKEN: undefined,
+  SUPABASE_ACCESS_APP_TOKEN: undefined,
 };
 const SECRET = "sk-very-secret-value-123";
 const ALL_KEYS = {
   LLM_API_KEY: SECRET,
+  LLM_MODEL: "gpt-test",
   GITHUB_TOKEN: SECRET,
   VERCEL_TOKEN: SECRET,
-  SUPABASE_ACCESS_TOKEN: SECRET,
+  SUPABASE_ACCESS_APP_TOKEN: SECRET,
 };
 const allConnected = (["github", "vercel", "supabase"] as const).map((p) =>
   connection(p),
 );
 
-test("현재 상태: 어댑터와 결정이 없어 실행할 수 없고, 필요한 것을 이름으로 알려 준다(비밀값 없이)", async () => {
-  const readiness = createIntegrationReadiness({ settings: settings([]) });
+test("현재 상태: 어댑터와 결정이 일부 없어 실행할 수 없고, 필요한 것을 이름으로 알려 준다(비밀값 없이)", async () => {
+  const readiness = createIntegrationReadiness({
+    codexProblems: async () => [],
+    settings: settings([]),
+    sandboxProblems: async () => [],
+  });
   const result = await withEnv(NO_KEYS, () => readiness.assess!());
   assert.equal(result.available, false);
   assert.equal(
     await withEnv(NO_KEYS, () => readiness.isRealModeAvailable()),
     false,
   );
+  for (const decided of ["DEC-002", "DEC-004"])
+    assert.ok(
+      !result.reason!.includes(decided),
+      `${decided}는 확정됐으므로 미결정으로 나오면 안 된다`,
+    );
   for (const expected of [
-    "DEC-002",
-    "DEC-004",
-    "DEC-005",
     "LLM_API_KEY",
+    "LLM_MODEL",
     "GITHUB_TOKEN",
     "VERCEL_TOKEN",
-    "SUPABASE_ACCESS_TOKEN",
     "연결 확인",
   ])
     assert.ok(
       result.reason!.includes(expected),
       `이유에 ${expected}가 있어야 한다`,
     );
+  // Supabase는 DB가 필요한 앱에서만 쓰므로 시작을 막는 이유에 넣지 않는다. 항목에는 준비되지 않음으로 남긴다.
+  for (const optional of ["Supabase", "DEC-005", "SUPABASE_ACCESS_APP_TOKEN"])
+    assert.ok(
+      !result.reason!.includes(optional),
+      `이유에 ${optional}가 없어야 한다`,
+    );
+  const supabase = result.requirements.find((r) => r.id === "SUPABASE")!;
+  assert.equal(supabase.ready, false);
+  assert.equal(supabase.required, false);
+  assert.match(supabase.note!, /DB가 필요한 앱/);
 });
 
-test("토큰과 연결 확인과 한도를 모두 채워도 어댑터가 없으면 준비되지 않는다", async () => {
+test("필수 항목(모델·샌드박스·GitHub·Vercel·한도)이 모두 준비되면 Supabase 없이도 실행할 수 있다", async () => {
   // 어댑터 구현 여부는 코드의 사실이다. 이 테스트는 그 사실이 바뀌면 함께 갱신해야 한다.
-  assert.equal(
-    Object.values(ADAPTERS).some((adapter) => adapter.implemented),
-    false,
+  assert.deepEqual(
+    Object.entries(ADAPTERS)
+      .filter(([, adapter]) => adapter.implemented)
+      .map(([name]) => name),
+    ["llm", "sandbox", "github", "vercel"],
   );
   const readiness = createIntegrationReadiness({
+    codexProblems: async () => [],
     settings: settings(allConnected),
+    sandboxProblems: async () => [],
   });
   const result = await withEnv(ALL_KEYS, () => readiness.assess!());
-  assert.equal(result.available, false);
-  assert.match(result.reason!, /어댑터 미구현/);
-  assert.ok(!result.reason!.includes(SECRET), "비밀값이 이유에 나오면 안 된다");
+  assert.equal(result.available, true, result.reason ?? "");
+  assert.equal(result.reason, null);
+  const supabase = result.requirements.find((r) => r.id === "SUPABASE")!;
+  assert.equal(supabase.ready, false, "Supabase 어댑터는 아직 없다");
+  assert.equal(supabase.required, false);
   assert.ok(!JSON.stringify(result).includes(SECRET));
+  assert.ok(
+    result.requirements.filter((r) => r.required).every((r) => r.ready),
+  );
   const llm = result.requirements.find((r) => r.id === "LLM")!;
   assert.ok(
     !llm.blockers.some((b) => b.includes("LLM_API_KEY")),
@@ -178,6 +205,7 @@ test("연결 확인이 실패했거나 오래되었거나 한도가 없으면 �
   ];
   const result = await withEnv(ALL_KEYS, () =>
     createIntegrationReadiness({
+      codexProblems: async () => [],
       settings: settings(bad, { maxModelCalls: null, maxEstimatedCost: null }),
     }).assess!(),
   );
@@ -188,4 +216,31 @@ test("연결 확인이 실패했거나 오래되었거나 한도가 없으면 �
   assert.match(blockers("SUPABASE"), /권한이 부족해요/);
   assert.match(blockers("LIMITS"), /모델 호출 횟수 한도/);
   assert.match(blockers("LIMITS"), /예상 비용 한도/);
+});
+
+test("샌드박스는 Docker가 꺼져 있거나 이미지가 없으면 코드가 있어도 막힌다", async () => {
+  const readiness = createIntegrationReadiness({
+    codexProblems: async () => [],
+    settings: settings(allConnected),
+    sandboxProblems: async () => [
+      "Docker가 실행 중이 아니에요. Docker Desktop을 켜 주세요",
+    ],
+  });
+  const result = await withEnv(ALL_KEYS, () => readiness.assess!());
+  const sandbox = result.requirements.find((r) => r.id === "SANDBOX")!;
+  assert.deepEqual(sandbox.blockers, [
+    "Docker가 실행 중이 아니에요. Docker Desktop을 켜 주세요",
+  ]);
+  assert.equal(result.available, false);
+});
+
+test("Codex가 준비되지 않으면 OpenAI 키가 있어도 실제 실행을 시작하지 않는다", async () => {
+  const readiness = createIntegrationReadiness({
+    settings: settings(allConnected),
+    sandboxProblems: async () => [],
+    codexProblems: async () => ["Codex 로그인이 필요해요"],
+  });
+  const result = await withEnv(ALL_KEYS, () => readiness.assess());
+  assert.equal(result.available, false);
+  assert.match(result.reason ?? "", /Codex 로그인/);
 });

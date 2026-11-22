@@ -25,11 +25,11 @@ export function ProjectExecutionPage({
   return (
     <div className="factory-ui project-manager project-execution">
       <nav className="pixel-wrap" aria-label="페이지 이동">
-        <Link
-          href={history ? `/projects/${encodeURIComponent(id)}` : "/projects"}
-        >
-          {history ? "← 프로젝트 상세" : "← 프로젝트 목록"}
-        </Link>
+        {history && (
+          <Link href={`/projects/${encodeURIComponent(id)}`}>
+            ← 프로젝트 상세
+          </Link>
+        )}
         <Link href={`/office?project=${encodeURIComponent(id)}`}>사무실로</Link>
       </nav>
       {history ? (

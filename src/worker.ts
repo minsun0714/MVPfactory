@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { hostname } from "node:os";
 import { Client } from "pg";
 import { createRedactor } from "@/domain/secrets";
+import { createRealExecutionConfig } from "@/server/real-execution";
 import { WORKER_VERSION, createWorkerRuntime } from "@/server/worker-runtime";
 import { db } from "@/lib/db";
 
@@ -42,19 +43,22 @@ async function main() {
     process.exit(1);
   });
 
+  const secrets = [
+    process.env.LLM_API_KEY,
+    process.env.GITHUB_TOKEN,
+    process.env.VERCEL_TOKEN,
+    process.env.SUPABASE_ACCESS_APP_TOKEN,
+    decodeURIComponent(new URL(connectionString).password),
+  ];
+  const real = createRealExecutionConfig(process.env, secrets);
   const runtime = await createWorkerRuntime({
     connectionString,
     demoDelayMs,
     workerId: `${hostname()}-${process.pid}`,
     log: (message) => console.log(message),
     // 로그와 실패 사유에 공급자 키나 DB 비밀번호가 섞여 나가지 않게 한다.
-    redact: createRedactor([
-      process.env.LLM_API_KEY,
-      process.env.GITHUB_TOKEN,
-      process.env.VERCEL_TOKEN,
-      process.env.SUPABASE_ACCESS_TOKEN,
-      decodeURIComponent(new URL(connectionString).password),
-    ]),
+    redact: createRedactor(secrets),
+    real: real ?? undefined,
   });
 
   // 이전 워커가 비정상 종료되었다면(잠금을 얻었으니 확실히 종료된 상태) 멈춰 있던 Job을 이어서 진행한다.
@@ -76,7 +80,11 @@ async function main() {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
-  console.log("데모 워커 시작 (실제 AI 생성·외부 연동은 하지 않습니다)");
+  console.log(
+    real
+      ? "워커 시작 (회의·기획: OpenAI / 코드 작성·수정: Codex CLI / 검증: Docker)"
+      : "데모 워커 시작 (LLM_API_KEY·LLM_MODEL이 없어 실제 실행은 하지 않습니다)",
+  );
   while (!stopping) {
     const worked = await runtime.worker.runOnce();
     if (!worked) await new Promise((resolve) => setTimeout(resolve, IDLE_MS));

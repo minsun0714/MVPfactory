@@ -88,7 +88,9 @@ test("연결 확인: 응답 코드에 따라 상태를 나누고 비밀 키는 �
     FIXED,
   );
   await assert.rejects(
-    withToken("SUPABASE_ACCESS_TOKEN", secret, () => failing.check("supabase")),
+    withToken("SUPABASE_ACCESS_APP_TOKEN", secret, () =>
+      failing.check("supabase"),
+    ),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === "SERVICE_UNAVAILABLE" &&
@@ -104,7 +106,7 @@ test("연결 확인: 공급자별 대상 이름을 읽는다", async () => {
     ).check("vercel"),
   );
   assert.equal(vercel.target, "dev");
-  const supabase = await withToken("SUPABASE_ACCESS_TOKEN", "t", () =>
+  const supabase = await withToken("SUPABASE_ACCESS_APP_TOKEN", "t", () =>
     createConnectionProbe(
       reply(200, [{ name: "내 조직" }, { name: "다른" }]),
       FIXED,
@@ -195,4 +197,27 @@ test("결과 계산: 데모는 완료가 될 수 없고 FAIL이 있으면 미완
       .completion.deployment,
     "NOT_RUN",
   );
+});
+
+test("Supabase는 생성 앱 토큰만 사용하고 기존 토큰으로 대체하지 않는다", async () => {
+  let auth = "";
+  const probe = createConnectionProbe(
+    (async (_url, init) => {
+      auth = new Headers(init?.headers).get("Authorization") ?? "";
+      return new Response(JSON.stringify([{ name: "app organization" }]));
+    }) as typeof fetch,
+    FIXED,
+  );
+  await withToken("SUPABASE_ACCESS_TOKEN", "legacy-token", async () => {
+    await withToken("SUPABASE_ACCESS_APP_TOKEN", undefined, async () => {
+      const result = await probe.check("supabase");
+      assert.equal(result.status, "NOT_CONNECTED");
+      assert.match(result.message ?? "", /SUPABASE_ACCESS_APP_TOKEN/);
+      assert.equal(auth, "");
+    });
+    await withToken("SUPABASE_ACCESS_APP_TOKEN", "app-token", async () => {
+      assert.equal((await probe.check("supabase")).status, "CONNECTED");
+      assert.equal(auth, "Bearer app-token");
+    });
+  });
 });

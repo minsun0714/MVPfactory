@@ -4,25 +4,26 @@ import type { OfficeState, RoleId } from "@/contracts";
 import { useOfficeScene } from "@/hooks/useOfficeScene";
 import { actors, SCENE_SIZE } from "@/components/office/scene/model";
 import { Button } from "@/components/ui/Button";
+import { DeveloperDelivery } from "@/components/office/DeveloperDelivery";
+import { deliveryRunId } from "@/components/office/scene/model";
 export function PixiOfficeScene({
   state,
   zoom,
   disabled,
   onRole,
   onMeeting,
+  onRevisionSubmitted,
 }: {
   state?: OfficeState;
   zoom: number;
   disabled: boolean;
   onRole: (role: RoleId) => void;
   onMeeting: () => void;
+  onRevisionSubmitted: () => void;
 }) {
-  const { host, ready, error, statement, meetingError, retry } = useOfficeScene(
-    state,
-    onRole,
-    onMeeting,
-    disabled,
-  );
+  const { host, ready, error, statement, meetingError, retry, deliveredRunId } =
+    useOfficeScene(state, onRole, onMeeting, disabled);
+  const deliveryId = deliveryRunId(state);
   return (
     <section className="office-scene" aria-label="사무실과 회의실">
       <div className="office-viewport">
@@ -43,6 +44,7 @@ export function PixiOfficeScene({
           )}
           {ready && state?.activeMeeting && statement && (
             <button
+              key={`${state.activeMeeting.id}:${statement.sequence}`}
               type="button"
               className="office-speech-bubble"
               onClick={onMeeting}
@@ -50,13 +52,20 @@ export function PixiOfficeScene({
               aria-label={`${actors[statement.role].label}: ${statement.summary}. 회의 기록 보기`}
               style={{
                 left: `${((actors[statement.role].seatX - SCENE_SIZE.originX) / SCENE_SIZE.width) * 100}%`,
-                top: `${((actors[statement.role].seatY - SCENE_SIZE.originY - 120) / SCENE_SIZE.height) * 100}%`,
+                top: `${((actors[statement.role].seatY - SCENE_SIZE.originY - 146) / SCENE_SIZE.height) * 100}%`,
               }}
             >
               <strong>{actors[statement.role].label}</strong>
               <span>{statement.summary}</span>
               <small>회의 기록 보기</small>
             </button>
+          )}
+          {state && deliveryId && (deliveredRunId === deliveryId || error) && (
+            <DeveloperDelivery
+              key={`${state.project.id}:${deliveryId}`}
+              state={state}
+              onSubmitted={onRevisionSubmitted}
+            />
           )}
         </div>
       </div>
@@ -106,7 +115,17 @@ export function PixiOfficeScene({
             </p>
           )}
           {!statement && !meetingError && (
-            <p>회의에 모여 첫 발언을 준비하고 있어요.</p>
+            <p>
+              {state.activeMeeting.status === "ENDED"
+                ? "회의를 마치고 자리로 돌아가고 있어요."
+                : state.activeMeeting.status === "FAILED"
+                  ? "회의 진행 중 문제가 생겨 확인을 기다리고 있어요."
+                  : state.activeMeeting.status === "INTERRUPTED"
+                    ? "회의가 잠시 멈췄어요."
+                    : state.activeMeeting.status === "WAITING_CEO"
+                      ? "대표님의 검토를 기다리고 있어요."
+                      : "회의에 모여 첫 발언을 준비하고 있어요."}
+            </p>
           )}
           {meetingError && (
             <p>발언을 불러오지 못했어요. 회의 기록에서 다시 확인해주세요.</p>

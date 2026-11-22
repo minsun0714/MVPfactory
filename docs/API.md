@@ -92,7 +92,6 @@ type ApiError = {
 | 409  | `RUN_PAUSED`                 | 일시정지 중인 Run에는 응답할 수 없음                             |
 | 409  | `INVALID_RUN_STATE`          | 현재 상태에서 불가능한 명령(예: 완료된 Run 재시도)               |
 | 409  | `STALE_GENERATION`           | 최신 목표가 접수된 뒤 과거 Run을 재시도함                        |
-| 409  | `VERSION_CONFLICT`           | 회사 설정 저장 중 다른 변경이 먼저 반영됨(`details.latest`)      |
 | 410  | `EVENTS_EXPIRED`             | 요청한 순번 이전 이벤트가 보존 범위를 벗어남. 스냅샷을 다시 조회 |
 | 415  | `UNSUPPORTED_MEDIA_TYPE`     | JSON이 아님                                                      |
 | 422  | `UNSUPPORTED_SCOPE`          | 지원 범위 밖 요구. `details.gaps`에 차이와 대안                  |
@@ -441,43 +440,9 @@ type Meeting = MeetingSummary & {
 
 복원 순서는 ① `office-state` 조회 → ② `lastSequence` 이후를 SSE로 접속입니다. 늦게 들어온 사용자에게 지나간 회의를 처음부터 재생하지 않고, 현재 상태에 맞는 위치나 요약으로 복원할 수 있다.
 
-## 8. 가상 회사 (REQ-015)
+## 8. 폐기된 꾸미기 API
 
-> 이 절은 **제안**이다. 화면 담당과 협의해 `src/contracts/company.ts`와 함께 확정한다.
-
-회사·캐릭터 설정은 작업 공간 공통이며 모든 프로젝트가 공유한다. 프로젝트 전환으로 초기화되지 않는다.
-
-```ts
-type Company = {
-  version: number; // 저장할 때마다 증가. 동시 편집 충돌 감지에 사용
-  characters: Record<RoleId, CharacterAppearance>;
-  office: OfficeLayout;
-  updatedAt: string;
-};
-type CharacterAppearance = {
-  body: string;
-  hair: string;
-  outfit: string;
-  accessories: string[]; // 카탈로그의 아이템 ID
-};
-type OfficeLayout = {
-  expansionLevel: number;
-  items: { itemId: string; x: number; y: number; rotation: number }[];
-  meetingSeats: { seatId: string; x: number; y: number }[]; // 배치에서 서버가 계산한 좌석(최대 4)
-};
-```
-
-| 메서드·경로                         | 설명                                                               |
-| ----------------------------------- | ------------------------------------------------------------------ |
-| `GET /api/company`                  | 현재 회사 설정                                                     |
-| `GET /api/company/catalog`          | 제공하는 아이템·확장 목록. 모두 처음부터 사용 가능(해금 조건 없음) |
-| `PUT /api/company/characters/:role` | 외형 저장. 본문 `{ version, appearance }`. `200` + `Company`       |
-| `PUT /api/company/office`           | 확장·배치 저장. 본문 `{ version, layout }`. `200` + `Company`      |
-
-- 미리보기는 클라이언트에서 처리하고, 저장할 때만 호출한다.
-- `version`이 최신과 다르면 `409 VERSION_CONFLICT` + `details.latest`. 화면은 편집 내용을 유지한 채 충돌을 알린다.
-- 저장 실패 시에도 화면의 편집 내용은 유지된다. 꾸미기 저장은 Run을 만들지 않는다.
-- 역할 식별(이름표), 진행 상태, 결정 응답은 외형·배치와 무관하게 `office-state`로 제공된다.
+`/api/company` 및 하위 카탈로그·외형·배치 저장 경로는 제거되었다. REQ-015는 폐기되었으며 대체 저장 API를 제공하지 않는다. 고정 사무실과 회의 상태 조회는 7절을 따른다.
 
 ## 9. 공통 설정 (REQ-002)
 
@@ -600,7 +565,6 @@ type Health = {
 | REQ-012     | `POST /projects/:id/runs`(`REVISION`), `GET /projects/:id/result`(`lastGood`) |
 | REQ-013     | `pause`, `resume`, `retry`, `GET /runs/:id/events`                            |
 | REQ-014     | `GET /runs/:id/usage`, `LIMIT_REACHED`                                        |
-| REQ-015     | `GET/PUT /company`, `GET /company/catalog`                                    |
 | REQ-016     | `meeting.*` 이벤트, `GET /runs/:id/meetings`, `GET /meetings/:id`             |
 
 ## 13. 열린 항목
@@ -624,7 +588,6 @@ type Health = {
 | 결정        | `GET /decisions`, `GET /decisions/:id`, `POST /decisions/:id/response`                                  | **구현됨**                                                                                     |
 | 이벤트      | `GET /runs/:id/events`, `GET /runs/:id/stream`(SSE), `GET /stream`(작업 공간 스트림)                    | **구현됨**                                                                                     |
 | 사무실·회의 | `GET /projects/:id/office-state`, `GET /runs/:id/meetings`, `GET /meetings/:id`                         | **구현됨**                                                                                     |
-| 가상 회사   | `GET /company`, `GET /company/catalog`, `PUT /company/characters/:role`, `PUT /company/office`          | **구현됨**(카탈로그와 기본 설정은 제안 초안)                                                   |
 | 설정        | `GET/PUT /settings`, `POST /settings/connections/:provider/verify`                                      | **구현됨**(연결 확인은 읽기 전용 호출만. 쓰기 권한은 실제 작업 때 확인)                        |
 | 결과·검증   | `GET /projects/:id/result`, `GET /runs/:id/verification`                                                | **구현됨**(읽기만. 검증 결과와 배포 기록은 워커가 만든다)                                      |
 | 시스템      | `GET /health`                                                                                           | **구현됨**                                                                                     |
@@ -641,7 +604,6 @@ type Health = {
 - **다시 시도:** `FAILED`만 가능하며 같은 `runId`로 `QUEUED`가 된다(복구 Job 등록, 열린 Run 예약을 다시 잡음). 이미 재시도되어 대기 중이면 같은 결과를 돌려주고(멱등), 더 최신 목표가 접수됐으면 `409 STALE_GENERATION`, 다른 Run이 열려 있으면 `409 ACTIVE_RUN_EXISTS`.
 - **역할 상태(`office-state`):** 서버가 기록한 마지막 `step.*` 이벤트와 Run 상태에서 계산한다. 완료 이벤트가 마지막이면 `DONE`, 시작만 있으면 Run이 `RUNNING`일 때 `WORKING`, `FAILED`이면 `FAILED`, 그 밖에는 `WAITING`이다. 이벤트가 없으면 `IDLE`.
 - **회의 목록·산출물 목록**은 `{ items, nextCursor: null }` 형식이다(페이지 없음).
-- **회사 설정:** 처음 읽을 때 기본값(역할별 외형, 책상 4개와 회의 의자 4개)이 만들어진다. 회의 좌석(`meetingSeats`)은 배치된 `meeting-chair`에서 서버가 계산하며 클라이언트가 보낸 좌석은 무시한다. 같은 버전으로 동시에 저장하면 하나만 반영되고 나머지는 `409 VERSION_CONFLICT`.
 - **연결 확인:** `.env`에 키가 있어도 확인하기 전에는 `CONNECTED`로 표시하지 않는다. 비밀 키는 요청 헤더로만 보내고 응답·오류·로그에 담지 않는다. 공급자에 닿지 못하면 이전 상태를 바꾸지 않고 `503`을 돌려준다.
 - **결과 판단(`result`):** 검증 항목 ID `BUILD`와 `FINAL_URL`은 시스템이 약속한 이름이며 각각 빌드 통과와 배포 성공을 뜻한다. 나머지 항목은 요구사항별(`APP-AC-*`)이다. 데모 실행이거나 `FAIL`·`NOT_RUN`이 남아 있으면 제품 완료가 아니다. 요구사항 항목이 하나도 없어도 완료가 아니다.
 - **작업 공간 스트림(`/stream`):** 접속한 뒤의 결정·상태 변화만 보낸다(접속 전 이력은 보내지 않음). 접속한 뒤 새로 생긴 Run은 처음부터 보낸다.

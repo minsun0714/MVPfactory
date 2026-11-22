@@ -4,7 +4,7 @@ import type { Provider } from "@/contracts/settings";
 const ENV_NAMES: Record<Provider, string> = {
   github: "GITHUB_TOKEN",
   vercel: "VERCEL_TOKEN",
-  supabase: "SUPABASE_ACCESS_TOKEN",
+  supabase: "SUPABASE_ACCESS_APP_TOKEN",
 };
 
 export function credentialEnvName(provider: Provider): string {

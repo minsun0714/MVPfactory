@@ -484,15 +484,26 @@ describe("일시정지와 실패", () => {
 
   test("실패하면 원인과 산출물을 남기고, 다시 시도하면 체크포인트에서 이어서 끝낸다", async () => {
     const { runId } = await begin("DELEGATE");
-    // 실제(REAL) 실행은 연동이 없어 마지막 단계에서 실패한다.
-    await db.run.update({ where: { id: runId }, data: { mode: "REAL" } });
-    const runtime = await newRuntime();
+    // 개발 단계가 시작된 직후 REAL로 바뀌면 마지막 단계(배포 반영 없음)에서 실패한다.
+    const runtime = await createWorkerRuntime({
+      connectionString,
+      demoDelayMs: 1,
+      sleep: async () => {
+        const row = await db.run.findUnique({ where: { id: runId } });
+        if (row?.stageId === "W08" && row.mode === "DEMO")
+          await db.run.update({ where: { id: runId }, data: { mode: "REAL" } });
+      },
+    });
+    runtimes.push(runtime);
     await runtime.drain();
 
     let run = await runRow(runId);
     assert.equal(run.status, "FAILED");
     assert.equal((run.failure as Json).retryable, true);
-    assert.match((run.failure as Json).message, /연동이 준비되지 않았습니다/);
+    assert.match(
+      (run.failure as Json).message,
+      /GitHub.*Vercel.*구현되지 않아/,
+    );
     assert.equal(await db.activeRunLock.count({ where: { runId } }), 0);
     assert.equal(
       (await db.job.findFirstOrThrow({ where: { runId, kind: "START" } }))

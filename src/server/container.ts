@@ -2,7 +2,6 @@
  * Composition Root. 구체 구현을 만들어 유스케이스에 연결한다.
  * 진입점(Route Handler, 워커)만 이 모듈을 사용한다.
  */
-import { createCompanyUseCases } from "@/application/company";
 import { createDecisionUseCases } from "@/application/decisions";
 import { createEventUseCases } from "@/application/events";
 import { createHealthUseCases } from "@/application/health";
@@ -14,7 +13,6 @@ import { createSettingsUseCases } from "@/application/settings";
 import { RunEventNotifier } from "@/infrastructure/events/run-event-notifier";
 import { createConnectionProbe } from "@/infrastructure/integrations/connection-probe";
 import { createIntegrationReadiness } from "@/infrastructure/integrations/readiness";
-import { createCompanyRepository } from "@/infrastructure/prisma/company-repository";
 import { createDecisionRepository } from "@/infrastructure/prisma/decision-repository";
 import { createRunEventRepository } from "@/infrastructure/prisma/event-repository";
 import { createHealthRepository } from "@/infrastructure/prisma/health-repository";
@@ -56,7 +54,6 @@ function build() {
       createWorkspaceFeedRepository(db),
     ),
     office: createOfficeUseCases(createOfficeRepository(db)),
-    company: createCompanyUseCases(createCompanyRepository(db)),
     settings: createSettingsUseCases(
       createSettingsRepository(db),
       createConnectionProbe(),

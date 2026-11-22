@@ -26,6 +26,7 @@ import { GET as getUsage } from "@/app/api/runs/[id]/usage/route";
 import { GET as getArtifact } from "@/app/api/artifacts/[id]/route";
 import { db, WORKSPACE_ID } from "@/lib/db";
 import { appendRunEvent } from "@/infrastructure/prisma/event-log";
+import { DEFAULT_RUN_LIMITS } from "@/infrastructure/integrations/default-limits";
 import { getContainer } from "@/server/container";
 import { createRunUseCases } from "@/application/runs";
 import { createRunRepository } from "@/infrastructure/prisma/run-repository";
@@ -296,7 +297,7 @@ describe("프로젝트", () => {
       ),
     );
     assert.equal(gap.body.supported, false);
-    assert.equal(gap.body.gaps[0].requirement, "로그인·회원가입");
+    assert.equal(gap.body.gaps[0].requirement, "로그인·회원가입·OAuth");
   });
 });
 
@@ -1290,7 +1291,11 @@ describe("산출물과 사용량", () => {
       );
       assert.equal(usage.body.usage.modelCalls, 0);
       assert.equal(usage.body.usage.estimatedCost, null);
-      assert.equal(usage.body.limits.maxModelCalls, null);
+      // 설정이 없으면 Run 시작 때 기본 한도가 복사된다.
+      assert.equal(
+        usage.body.limits.maxModelCalls,
+        DEFAULT_RUN_LIMITS.maxModelCalls,
+      );
       assert.equal(
         (await call(getUsage(req("GET", "/api/runs/없음/usage"), ctx("없음"))))
           .status,

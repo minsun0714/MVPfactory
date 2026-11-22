@@ -30,8 +30,11 @@ def save(name, index, children=None):
     svg.append(group)
     ET.ElementTree(svg).write(output / f'{name}.svg', encoding='unicode')
 
-for name, index in [('shell',0),('designer-desk',1),('developer-desk',2),('pm-desk',3),('planner-desk',4)]:
+for name, index in [('shell',0),('designer-desk',1),('pm-desk',3),('planner-desk',4)]:
     save(name,index)
+laptop_index = next(i for i, child in enumerate(groups[2]) if child.get('id') == 'developer-laptop')
+save('developer-desk', 2, [i for i in range(len(groups[2])) if i != laptop_index])
+save('developer-laptop', 2, [laptop_index])
 for name,index,end in [('pm',8,23),('planner',9,21)]:
     save(name,index,range(2,end))
     save(f'{name}-chair',index,[1,*range(end,len(groups[index]))])

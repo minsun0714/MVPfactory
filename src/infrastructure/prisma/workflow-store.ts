@@ -11,6 +11,7 @@ import type {
 } from "@/application/workflow-ports";
 import type { DecisionChoice, MeetingOutcome } from "@/contracts";
 import { appendRunEvent } from "@/infrastructure/prisma/event-log";
+import { readLimits } from "@/infrastructure/prisma/mappers";
 import { hashRequest } from "@/infrastructure/prisma/idempotency";
 
 type Tx = Prisma.TransactionClient;
@@ -299,6 +300,115 @@ export function createWorkflowStore(db: PrismaClient): WorkflowStore {
           data: { runId, kind: "ACTIVE_TIME", amount: seconds },
         }),
       ]);
+    },
+
+    async loadUsage(runId) {
+      const row = await db.run.findUniqueOrThrow({ where: { id: runId } });
+      return {
+        limits: readLimits(row.limits),
+        usage: {
+          modelCalls: row.usageModelCalls,
+          fixAttempts: row.usageFixAttempts,
+          activeSeconds: row.usageActiveSeconds,
+          waitingSeconds: row.usageWaitingSeconds,
+          estimatedCost:
+            row.usageCostAmount !== null && row.usageCostCurrency
+              ? {
+                  amount: Number(row.usageCostAmount),
+                  currency: row.usageCostCurrency,
+                  isEstimate: true,
+                }
+              : null,
+        },
+      };
+    },
+
+    async recordModelCall(runId, call) {
+      await db.$transaction([
+        // 비용 합계가 비어 있으면 SQL에서 NULL + 값이 NULL이 되므로 먼저 0으로 시작한다.
+        db.run.updateMany({
+          where: { id: runId, usageCostAmount: null },
+          data: call.costUsd === null ? {} : { usageCostAmount: 0 },
+        }),
+        db.run.update({
+          where: { id: runId },
+          data: {
+            usageModelCalls: { increment: 1 },
+            // 단가를 모르면 비용은 기록하지 않는다(0으로 꾸미지 않는다).
+            ...(call.costUsd === null
+              ? {}
+              : {
+                  usageCostAmount: { increment: call.costUsd },
+                  usageCostCurrency: "USD",
+                }),
+          },
+        }),
+        db.usageRecord.create({
+          data: {
+            runId,
+            kind: "MODEL_CALL",
+            amount: 1,
+            costAmount: call.costUsd,
+            costCurrency: call.costUsd === null ? null : "USD",
+          },
+        }),
+      ]);
+    },
+
+    async recordFixAttempt(runId) {
+      await db.$transaction([
+        db.run.update({
+          where: { id: runId },
+          data: { usageFixAttempts: { increment: 1 } },
+        }),
+        db.usageRecord.create({
+          data: { runId, kind: "FIX_ATTEMPT", amount: 1 },
+        }),
+      ]);
+    },
+
+    async specVersionOf(runId) {
+      const spec = await db.productSpec.findFirst({
+        where: { createdByRunId: runId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      return spec?.version ?? null;
+    },
+
+    async loadConfirmedSpec(runId) {
+      const spec = await db.productSpec.findFirst({
+        where: { createdByRunId: runId },
+        orderBy: { version: "desc" },
+        select: { version: true, content: true },
+      });
+      if (!spec) return null;
+      const content = spec.content;
+      return {
+        version: spec.version,
+        content:
+          content && typeof content === "object" && !Array.isArray(content)
+            ? (content as Record<string, unknown>)
+            : {},
+      };
+    },
+
+    async latestSourceSnapshot(runId) {
+      return db.sourceSnapshot.findFirst({
+        where: { runId },
+        orderBy: { createdAt: "desc" },
+        select: { sourceDigest: true, storageRef: true },
+      });
+    },
+
+    async saveSourceSnapshot(runId, snapshot) {
+      await db.sourceSnapshot.upsert({
+        where: {
+          runId_sourceDigest: { runId, sourceDigest: snapshot.sourceDigest },
+        },
+        create: { runId, templateVersion: "generated-v1", ...snapshot },
+        update: {},
+      });
     },
 
     // ── 단계와 산출물

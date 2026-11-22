@@ -66,7 +66,7 @@
 | `prisma/schema/artifacts.prisma`    | `Artifact`, `SourceSnapshot`, `VerificationReport`, `VerificationItem`             |
 | `prisma/schema/events.prisma`       | `RunEvent`, `Meeting`, `MeetingEntry`                                              |
 | `prisma/schema/integrations.prisma` | `ExternalResource`, `ExternalOperation`, `AppMigration`, `Deployment`              |
-| `prisma/schema/company.prisma`      | `CompanyLayout`                                                                    |
+| `prisma/schema/company.prisma`      | `CompanyLayout` (폐기된 데이터, @@ignore)                                          |
 | `prisma/schema/ops.prisma`          | `WorkerHeartbeat`                                                                  |
 
 마이그레이션 폴더는 스키마 폴더 **안**인 `prisma/schema/migrations`에 하나로 유지한다. 스키마를 폴더로 지정하면 Prisma가 이 위치에서 마이그레이션을 찾는다(`prisma/migrations`에 두면 "No migration found"가 된다).
@@ -80,7 +80,6 @@
 ```mermaid
 erDiagram
     Workspace ||--o{ Project : "속함"
-    Workspace ||--|| CompanyLayout : "하나"
     Workspace ||--o{ ConnectionState : "공급자별"
     Workspace ||--o| ActiveRunLock : "열린 Run 예약"
     Project ||--o{ ProductSpec : "버전"
@@ -515,19 +514,9 @@ erDiagram
 
 제약: **UQ(`projectId`, `providerDeploymentId`)**.
 
-### 5.8 가상 회사 (REQ-015)
+### 5.8 폐기된 회사 설정
 
-**CompanyLayout** — 모든 프로젝트가 공유하는 회사·캐릭터 설정. 행은 하나다.
-
-| 컬럼          | 타입             | 설명                                       |
-| ------------- | ---------------- | ------------------------------------------ |
-| `workspaceId` | PK, FK Workspace |                                            |
-| `version`     | int default 1    | 저장할 때마다 증가. 동시 편집 충돌 감지    |
-| `characters`  | jsonb            | `Record<RoleId, CharacterAppearance>`      |
-| `office`      | jsonb            | `OfficeLayout`(확장 단계, 배치, 회의 좌석) |
-| `updatedAt`   | timestamptz      |                                            |
-
-JSON으로 두는 이유는 아이템·배치 구조가 화면과 함께 자주 바뀔 가능성이 크기 때문이다. 형식은 서버가 저장 시점에 검증한다(`src/contracts/company.ts`). 아이템 카탈로그는 코드의 정적 데이터이며 테이블이 아니다.
+REQ-015 제거로 `CompanyLayout`의 API·저장소·Prisma Client 접근을 폐기했다. 기존 DB 데이터를 삭제하지 않도록 스키마의 `@@ignore`와 Workspace 관계의 `@ignore`로 호환 정의만 남긴다. 이전 생성 마이그레이션은 변경하지 않는다. 현재 사무실은 이 테이블을 읽거나 쓰지 않는다.
 
 ### 5.9 운영
 
@@ -543,14 +532,13 @@ JSON으로 두는 이유는 아이템·배치 구조가 화면과 함께 자주 
 
 함께 확정되어야 하는 변경이다. 각 항목은 하나의 업무 DB 트랜잭션에서 처리한다. 모델·샌드박스·공급자 호출 중에는 트랜잭션과 행 잠금을 열어 두지 않는다.
 
-| 이름                  | 포함하는 변경                                                                                                                                       | 실패 시                                                                          |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| **T1 Run 접수**       | `IdempotencyRecord` 조회·저장 → `Project.projectGeneration` 증가 → `ActiveRunLock` 삽입 → `Run` 삽입 → `Job(START)` 삽입 → `RunEvent(run.accepted)` | 잠금 충돌이면 `ACTIVE_RUN_EXISTS`. 전부 롤백                                     |
-| **T2 결정 응답**      | `Decision`을 조건부 갱신(`status = OPEN`이고 `proposalVersion` 일치이고 Run이 정지 중이 아님) → `Job(RESUME)` 삽입 → `RunEvent(decision.answered)`  | 갱신 행이 0이면 조회해 충돌 종류를 판단. 응답과 재개 Job이 하나만 남는 일은 없다 |
-| **T3 이벤트 추가**    | `Run.lastSequence`를 1 올리고(`UPDATE … RETURNING`) `RunEvent`를 같은 순번으로 삽입 → `pg_notify`                                                   | 순번이 비는 일이 없다. 알림은 커밋 후 전달된다                                   |
-| **T4 결정 반영**      | `Decision`을 `APPLIED`로(`appliedAt IS NULL` 조건) → `ProductSpec` 새 버전 → `Project.confirmedSpecVersion` 갱신                                    | 같은 결정을 두 번 반영하지 않는다                                                |
-| **T5 Run 종료**       | `Run.status` 확정 → `ActiveRunLock` 삭제 → (`SUCCEEDED`이면) `Project.lastGoodDeploymentId` 갱신 → `RunEvent`                                       | 완료 조건은 이 트랜잭션 전에 시스템이 확인한다                                   |
-| **T6 회사 설정 저장** | `UPDATE CompanyLayout … WHERE version = :기대 버전`으로 `version + 1`                                                                               | 갱신 행이 0이면 `VERSION_CONFLICT`                                               |
+| 이름               | 포함하는 변경                                                                                                                                       | 실패 시                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **T1 Run 접수**    | `IdempotencyRecord` 조회·저장 → `Project.projectGeneration` 증가 → `ActiveRunLock` 삽입 → `Run` 삽입 → `Job(START)` 삽입 → `RunEvent(run.accepted)` | 잠금 충돌이면 `ACTIVE_RUN_EXISTS`. 전부 롤백                                     |
+| **T2 결정 응답**   | `Decision`을 조건부 갱신(`status = OPEN`이고 `proposalVersion` 일치이고 Run이 정지 중이 아님) → `Job(RESUME)` 삽입 → `RunEvent(decision.answered)`  | 갱신 행이 0이면 조회해 충돌 종류를 판단. 응답과 재개 Job이 하나만 남는 일은 없다 |
+| **T3 이벤트 추가** | `Run.lastSequence`를 1 올리고(`UPDATE … RETURNING`) `RunEvent`를 같은 순번으로 삽입 → `pg_notify`                                                   | 순번이 비는 일이 없다. 알림은 커밋 후 전달된다                                   |
+| **T4 결정 반영**   | `Decision`을 `APPLIED`로(`appliedAt IS NULL` 조건) → `ProductSpec` 새 버전 → `Project.confirmedSpecVersion` 갱신                                    | 같은 결정을 두 번 반영하지 않는다                                                |
+| **T5 Run 종료**    | `Run.status` 확정 → `ActiveRunLock` 삭제 → (`SUCCEEDED`이면) `Project.lastGoodDeploymentId` 갱신 → `RunEvent`                                       | 완료 조건은 이 트랜잭션 전에 시스템이 확인한다                                   |
 
 체크포인트(LangGraph)와 업무 테이블은 별도 저장 경계다. 결정 준비 → interrupt 저장 → `OPEN` 표시 순서로 처리하고, 한쪽만 저장된 상태는 복구 때 기존 결정과 체크포인트를 맞춘다.
 
@@ -591,7 +579,6 @@ JSON으로 두는 이유는 아이템·배치 구조가 화면과 함께 자주 
 | CEO 결정 (§5)         | `Decision`, `Job`, `RunEvent`                                                                              |
 | 이벤트·SSE (§6)       | `RunEvent`, `Run.lastSequence`, `Run.eventsRetainedFrom`                                                   |
 | 사무실 화면·회의 (§7) | `Run`, `Decision`, `Artifact`, `RunEvent`, `Meeting`, `MeetingEntry`                                       |
-| 가상 회사 (§8)        | `CompanyLayout`                                                                                            |
 | 공통 설정 (§9)        | `Workspace`, `ConnectionState`                                                                             |
 | 결과·검증 (§10)       | `Deployment`, `ExternalResource`, `VerificationReport`, `VerificationItem`, `Project.lastGoodDeploymentId` |
 | 시스템 (§11)          | `WorkerHeartbeat`                                                                                          |

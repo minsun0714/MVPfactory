@@ -11,6 +11,17 @@ import type { RunStatus } from "@/contracts/runs";
 /** 검증 항목 ID 중 시스템이 약속한 이름. 나머지는 생성 앱의 요구사항별 항목(`APP-AC-*`)이다. */
 export const CHECK_BUILD = "BUILD";
 export const CHECK_FINAL_URL = "FINAL_URL";
+export const CHECK_TESTS = "TESTS";
+export const CHECK_SECRETS = "SECRETS";
+export const CHECK_DB_ACCESS = "DB_ACCESS";
+/** 시스템 검증 항목. 요구사항 충족 여부를 말해 주는 항목이 아니므로 "요구사항 항목"으로 세지 않는다. */
+const SYSTEM_CHECKS: string[] = [
+  CHECK_BUILD,
+  CHECK_FINAL_URL,
+  CHECK_TESTS,
+  CHECK_SECRETS,
+  CHECK_DB_ACCESS,
+];
 
 export type ResultInput = {
   latestRun: { id: string; status: RunStatus; mode: RunMode } | null;
@@ -51,7 +62,7 @@ export function buildResult(input: ResultInput): Result {
     : "NOT_RUN";
 
   const requirementItems = input.items.filter(
-    (item) => item.id !== CHECK_BUILD && item.id !== CHECK_FINAL_URL,
+    (item) => !SYSTEM_CHECKS.includes(item.id),
   );
   const unresolved = requirementItems.filter(
     (item) => item.result === "FAIL" || item.result === "NOT_RUN",

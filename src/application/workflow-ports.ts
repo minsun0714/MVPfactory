@@ -9,7 +9,12 @@ import type {
   DecisionStatus,
 } from "@/contracts/decisions";
 import type { MeetingOutcome, MeetingReactionKind } from "@/contracts/office";
-import type { ArtifactAuthor, RunStatus } from "@/contracts/runs";
+import type {
+  ArtifactAuthor,
+  RunLimits,
+  RunStatus,
+  Usage,
+} from "@/contracts/runs";
 import type { DecisionDraft } from "@/domain/demo-content";
 import type { StepDef } from "@/domain/workflow";
 
@@ -91,6 +96,35 @@ export interface WorkflowStore {
   succeedRun(runId: string): Promise<void>;
   failRun(runId: string, failure: Failure): Promise<void>;
   addActiveSeconds(runId: string, seconds: number): Promise<void>;
+
+  // ── 사용량(한도 판단의 근거). 호출할 때마다 원장에 한 줄을 남기고 Run 합계를 올린다.
+  loadUsage(runId: string): Promise<{ limits: RunLimits; usage: Usage }>;
+  recordModelCall(
+    runId: string,
+    call: { inputTokens: number; outputTokens: number; costUsd: number | null },
+  ): Promise<void>;
+  recordFixAttempt(runId: string): Promise<void>;
+
+  // ── 소스 보존(샌드박스 밖). 파일 내용은 `SourceStorage`가 보관하고 DB에는 참조만 둔다.
+  /** 이 Run이 확정한 사양의 버전. 확정 전이면 null */
+  specVersionOf(runId: string): Promise<number | null>;
+  /** 이 Run이 확정한 사양의 버전과 내용. 확정 전이면 null. 개발·배포는 작업 중 산출물이 아니라 이 확정본만 쓴다. */
+  loadConfirmedSpec(
+    runId: string,
+  ): Promise<{ version: number; content: Record<string, unknown> } | null>;
+  /** 이 Run에서 마지막으로 보존한(검증을 통과한) 소스 */
+  latestSourceSnapshot(
+    runId: string,
+  ): Promise<{ sourceDigest: string; storageRef: string } | null>;
+  saveSourceSnapshot(
+    runId: string,
+    snapshot: {
+      sourceDigest: string;
+      lockfileDigest: string | null;
+      fileCount: number;
+      storageRef: string;
+    },
+  ): Promise<void>;
 
   // ── 단계와 산출물
   beginStep(runId: string, step: StepDef): Promise<void>;

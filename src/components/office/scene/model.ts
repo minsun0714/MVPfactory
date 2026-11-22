@@ -1,4 +1,10 @@
-import type { Meeting, OfficeState, RoleId } from "@/contracts";
+import type {
+  Meeting,
+  MeetingStatement,
+  MeetingReaction,
+  OfficeState,
+  RoleId,
+} from "@/contracts";
 export const SCENE_SIZE = {
   width: 1300,
   height: 660,
@@ -48,13 +54,25 @@ export const actors = {
   },
 } as const;
 export type Point = { x: number; y: number };
+export const DELIVERY_SPOT: Point = { x: 975, y: 665 };
+export function deliveryRunId(state?: OfficeState): string | null {
+  return state?.run?.mode === "REAL" &&
+    state.run.status === "SUCCEEDED" &&
+    !state.activeMeeting
+    ? state.run.id
+    : null;
+}
 export type SceneSnapshot = {
+  deliveryRunId: string | null;
   projectId: string | null;
   meetingId: string | null;
   participants: RoleId[];
   speaker: RoleId | null;
   speakerSequence: number;
   paused: boolean;
+  status: Meeting["status"] | null;
+  statements: MeetingStatement[];
+  reactions: MeetingReaction[];
   targets: Record<RoleId, Point>;
 };
 /** Server snapshots are the authority. This projection never produces a command. */
@@ -79,18 +97,27 @@ export function projectScene(
     undefined,
   );
   return {
+    deliveryRunId: deliveryRunId(state),
     projectId: state?.project.id ?? null,
     meetingId: active?.id ?? null,
     participants,
-    speaker: statement?.role ?? null,
+    speaker: participants.length ? (statement?.role ?? null) : null,
     speakerSequence: statement?.sequence ?? 0,
     paused: state?.run?.status === "PAUSED" || active?.status === "INTERRUPTED",
+    status: active?.status ?? null,
+    statements:
+      participants.length && matching
+        ? [...matching.statements].sort((a, b) => a.sequence - b.sequence)
+        : [],
+    reactions: participants.length && matching ? matching.reactions : [],
     targets: Object.fromEntries(
       Object.entries(actors).map(([role, actor]) => [
         role,
-        participants.includes(role as RoleId)
-          ? { x: actor.seatX, y: actor.seatY }
-          : { x: actor.x, y: actor.y },
+        role === "DEVELOPER" && deliveryRunId(state)
+          ? DELIVERY_SPOT
+          : participants.includes(role as RoleId)
+            ? { x: actor.seatX, y: actor.seatY }
+            : { x: actor.x, y: actor.y },
       ]),
     ) as Record<RoleId, Point>,
   };

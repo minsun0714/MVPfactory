@@ -291,13 +291,31 @@ test("Run 시작 규칙", () => {
   );
 });
 
-test("지원 범위 사전 확인은 알려진 범위 밖 요구만 잡고 부정 표현은 제외한다", () => {
+test("지원 범위 사전 확인은 인증을 제외하고 인증 없는 앱은 허용한다", () => {
   assert.equal(
     checkScope({ idea: "로그인 없이 쓰는 공부 기록 앱" }).supported,
     true,
   );
   assert.equal(
     checkScope({ idea: "회원가입과 로그인이 있는 가계부" }).supported,
+    false,
+  );
+  for (const idea of [
+    "구글 OAuth 메모장",
+    "소셜 로그인 앱",
+    "sign up for notes",
+  ]) {
+    assert.equal(checkScope({ idea }).supported, false);
+  }
+  for (const idea of [
+    "로그인·회원가입 없이 쓰는 앱",
+    "OAuth 제외",
+    "without login calculator",
+  ]) {
+    assert.equal(checkScope({ idea }).supported, true);
+  }
+  assert.equal(
+    checkScope({ idea: "로그인 없이 보기, 수정은 구글 로그인 필요" }).supported,
     false,
   );
   const result = checkScope({ idea: "결제가 되는 모바일 앱" });

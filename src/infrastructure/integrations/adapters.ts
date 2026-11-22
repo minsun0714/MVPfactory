@@ -9,26 +9,14 @@
  */
 export const ADAPTERS = {
   /** 역할별 LLM 호출 클라이언트 */
-  llm: {
-    implemented: false,
-    decided: false,
-    decision:
-      "DEC-002 AI 연결 방식(API 직접 호출 또는 기존 코딩 도구 연계)과 모델·비용 부담",
-  },
-  /** 생성 코드를 설치·빌드·테스트하는 격리 환경 */
-  sandbox: {
-    implemented: false,
-    decided: false,
-    decision: "DEC-004 생성 코드 실행 환경과 권한",
-  },
+  llm: { implemented: true, decided: true, decision: null }, // DEC-002: OpenAI, 모델은 LLM_MODEL
+  /** 생성 코드를 설치·빌드·테스트하는 격리 환경. DEC-004 확정: 로컬 Docker(서버로 옮길 때 다시 검토) */
+  sandbox: { implemented: true, decided: true, decision: null },
   /** 저장소 생성과 코드 반영 */
-  github: { implemented: false, decided: true, decision: null },
+  github: { implemented: true, decided: true, decision: null },
   /** 배포 후보 생성과 게시 */
-  vercel: { implemented: false, decided: true, decision: null },
+  vercel: { implemented: true, decided: true, decision: null },
   /** 생성 앱 DB 프로젝트 생성과 스키마 적용 */
-  supabase: {
-    implemented: false,
-    decided: false,
-    decision: "DEC-005 Supabase 조직·지역·요금제·생성 한도",
-  },
+  // DEC-005 확정: 공용 Supabase 프로젝트 1개(서울)에 앱마다 스키마. 실제 계정에서 확인 전까지 implemented=false
+  supabase: { implemented: false, decided: true, decision: null },
 } as const;

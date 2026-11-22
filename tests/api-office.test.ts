@@ -1,12 +1,9 @@
 import "@tests/helpers/test-database"; // 반드시 가장 먼저: 개발 DB 대신 테스트 DB를 쓴다
+import { DEFAULT_RUN_LIMITS } from "@/infrastructure/integrations/default-limits";
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { after, before, describe, test } from "node:test";
-import { GET as getCompany } from "@/app/api/company/route";
-import { GET as getCatalog } from "@/app/api/company/catalog/route";
-import { PUT as putCharacter } from "@/app/api/company/characters/[role]/route";
-import { PUT as putOffice } from "@/app/api/company/office/route";
+import { after, describe, test } from "node:test";
 import { GET as getHealth } from "@/app/api/health/route";
 import { GET as getMeeting } from "@/app/api/meetings/[id]/route";
 import { GET as getOfficeState } from "@/app/api/projects/[id]/office-state/route";
@@ -331,168 +328,9 @@ describe("사무실 화면 상태", () => {
   });
 });
 
-describe("가상 회사", () => {
-  // 이 테스트는 회사 설정을 바꾸므로, 끝나면 원래 내용으로 되돌려 개발 화면에 남지 않게 한다.
-  let original: { characters: unknown; office: unknown } | null = null;
-  before(async () => {
-    await call(getCompany());
-    const row = await db.companyLayout.findUniqueOrThrow({
-      where: { workspaceId: WORKSPACE_ID },
-    });
-    original = { characters: row.characters, office: row.office };
-  });
-  after(async () => {
-    if (!original) return;
-    await db.companyLayout.update({
-      where: { workspaceId: WORKSPACE_ID },
-      data: {
-        characters: original.characters as object,
-        office: original.office as object,
-      },
-    });
-  });
-
-  const putChar = (role: string, body: unknown) =>
-    call(
-      putCharacter(req("PUT", `/api/company/characters/${role}`, body), {
-        params: Promise.resolve({ role }),
-      }),
-    );
-  const putOff = (body: unknown) =>
-    call(putOffice(req("PUT", "/api/company/office", body)));
-
-  test("처음 읽으면 기본 회사 설정이 만들어지고 카탈로그를 읽을 수 있다", async () => {
-    const res = await call(getCompany());
-    assert.equal(res.status, 200);
-    assert.deepEqual(Object.keys(res.body.characters).sort(), [
-      "DESIGNER",
-      "DEVELOPER",
-      "PLANNER",
-      "PM",
-    ]);
-    assert.ok(res.body.office.meetingSeats.length <= 4);
-    assert.ok(res.body.version >= 1);
-    const catalog = await call(getCatalog());
-    assert.ok(catalog.body.items.some((i: Json) => i.id === "beret"));
-    assert.equal(catalog.body.expansions[0].level, 0);
-  });
-
-  test("외형을 저장하면 버전이 오르고, 오래된 버전은 충돌로 거절한다", async () => {
-    const current = (await call(getCompany())).body;
-    const appearance = {
-      body: "body-2",
-      hair: "hair-bob",
-      outfit: "outfit-hoodie",
-      accessories: ["glasses", "glasses", "pencil"],
-    };
-    const saved = await putChar("DESIGNER", {
-      version: current.version,
-      appearance,
-    });
-    assert.equal(saved.status, 200);
-    assert.equal(saved.body.version, current.version + 1);
-    assert.deepEqual(saved.body.characters.DESIGNER.accessories, [
-      "glasses",
-      "pencil",
-    ]);
-    assert.deepEqual(saved.body.characters.PM, current.characters.PM);
-
-    const stale = await putChar("DESIGNER", {
-      version: current.version,
-      appearance,
-    });
-    assert.equal(stale.status, 409);
-    assert.equal(stale.body.error.code, "VERSION_CONFLICT");
-    assert.equal(stale.body.error.details.latest.version, current.version + 1);
-
-    assert.equal(
-      (
-        await putChar("DESIGNER", {
-          version: saved.body.version,
-          appearance: { ...appearance, hair: "없는-머리" },
-        })
-      ).status,
-      400,
-    );
-    assert.equal(
-      (
-        await putChar("DESIGNER", {
-          version: saved.body.version,
-          appearance: {
-            ...appearance,
-            accessories: ["a", "b", "c", "d", "e", "f"],
-          },
-        })
-      ).status,
-      400,
-    );
-    assert.equal(
-      (await putChar("MANAGER", { version: saved.body.version, appearance }))
-        .status,
-      404,
-    );
-    assert.equal((await putChar("PM", { appearance })).status, 400);
-  });
-
-  test("사무실 배치를 저장하면 회의 좌석을 서버가 계산한다", async () => {
-    const current = (await call(getCompany())).body;
-    const layout = {
-      expansionLevel: 1,
-      items: [
-        { itemId: "meeting-table", x: 5, y: 5, rotation: 0 },
-        { itemId: "meeting-chair", x: 4, y: 5, rotation: 90 },
-        { itemId: "meeting-chair", x: 6, y: 5, rotation: 270 },
-        { itemId: "plant", x: 0, y: 0, rotation: 0 },
-      ],
-      meetingSeats: [{ seatId: "가짜", x: 99, y: 99 }],
-    };
-    const saved = await putOff({ version: current.version, layout });
-    assert.equal(saved.status, 200);
-    assert.deepEqual(saved.body.office.meetingSeats, [
-      { seatId: "seat-1", x: 4, y: 5 },
-      { seatId: "seat-2", x: 6, y: 5 },
-    ]);
-    assert.equal(saved.body.office.expansionLevel, 1);
-    const reloaded = await call(getCompany());
-    assert.deepEqual(reloaded.body.office, saved.body.office);
-
-    const v = saved.body.version;
-    const bad = (items: unknown[], level = 1) =>
-      putOff({ version: v, layout: { expansionLevel: level, items } });
-    assert.equal(
-      (await bad([{ itemId: "hair-bob", x: 1, y: 1, rotation: 0 }])).status,
-      400,
-    );
-    assert.equal(
-      (await bad([{ itemId: "desk", x: -1, y: 1, rotation: 0 }])).status,
-      400,
-    );
-    assert.equal(
-      (await bad([{ itemId: "desk", x: 1, y: 1, rotation: 45 }])).status,
-      400,
-    );
-    assert.equal((await bad([], 9)).status, 400);
-    assert.equal((await call(getCompany())).body.version, v);
-  });
-
-  test("같은 버전으로 동시에 저장하면 하나만 반영된다", async () => {
-    const current = (await call(getCompany())).body;
-    const layout = (x: number) => ({
-      expansionLevel: 0,
-      items: [{ itemId: "desk", x, y: 1, rotation: 0 }],
-    });
-    const results = await Promise.all([
-      putOff({ version: current.version, layout: layout(1) }),
-      putOff({ version: current.version, layout: layout(2) }),
-    ]);
-    assert.deepEqual(results.map((r) => r.status).sort(), [200, 409]);
-    assert.equal((await call(getCompany())).body.version, current.version + 1);
-  });
-});
-
 describe("공통 설정", () => {
   const withoutTokens = async (fn: () => Promise<void>) => {
-    const keys = ["GITHUB_TOKEN", "VERCEL_TOKEN", "SUPABASE_ACCESS_TOKEN"];
+    const keys = ["GITHUB_TOKEN", "VERCEL_TOKEN", "SUPABASE_ACCESS_APP_TOKEN"];
     const saved = keys.map((k) => process.env[k]);
     keys.forEach((k) => delete process.env[k]);
     try {
@@ -558,10 +396,14 @@ describe("공통 설정", () => {
     assert.equal(changed.body.repoVisibility, "PUBLIC");
     assert.equal(changed.body.limits.maxModelCalls, 50);
     assert.equal(changed.body.limits.maxEstimatedCost, 12.5);
-    assert.equal(changed.body.limits.maxFixAttempts, null);
-    const partial = await put({ limits: { maxFixAttempts: 3 } });
+    // 지정하지 않은 한도는 null이 아니라 기본값으로 읽힌다.
+    assert.equal(
+      changed.body.limits.maxFixAttempts,
+      DEFAULT_RUN_LIMITS.maxFixAttempts,
+    );
+    const partial = await put({ limits: { maxFixAttempts: 2 } });
     assert.equal(partial.body.limits.maxModelCalls, 50);
-    assert.equal(partial.body.limits.maxFixAttempts, 3);
+    assert.equal(partial.body.limits.maxFixAttempts, 2);
 
     assert.equal((await put({ repoVisibility: "SECRET" })).status, 400);
     assert.equal((await put({ limits: { maxModelCalls: -1 } })).status, 400);
@@ -576,12 +418,8 @@ describe("공통 설정", () => {
       },
     });
     assert.equal(restored.body.repoVisibility, "PRIVATE");
-    assert.deepEqual(restored.body.limits, {
-      maxModelCalls: null,
-      maxFixAttempts: null,
-      maxActiveSeconds: null,
-      maxEstimatedCost: null,
-    });
+    // null로 되돌리면 저장값이 지워지고 기본값이 적용된다.
+    assert.deepEqual(restored.body.limits, DEFAULT_RUN_LIMITS);
   });
 });
 

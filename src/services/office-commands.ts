@@ -1,7 +1,6 @@
 import { officeRequest } from "@/services/office-api";
 import { apiPaths } from "@/contracts/paths";
 import type {
-  Company,
   Connection,
   Project,
   Run,
@@ -9,10 +8,7 @@ import type {
   ScopeCheckResult,
   Settings,
   StartRunRequest,
-  UpdateCharacterRequest,
-  UpdateOfficeRequest,
   UpdateSettingsRequest,
-  RoleId,
   Provider,
 } from "@/contracts";
 function send<T>(path: string, method: string, body?: unknown, key?: string) {
@@ -48,8 +44,4 @@ export const officeCommands = {
     send<Settings>(apiPaths.settings, "PUT", body),
   verify: (provider: Provider) =>
     send<Connection>(apiPaths.connectionVerify(provider), "POST"),
-  character: (role: RoleId, body: UpdateCharacterRequest) =>
-    send<Company>(apiPaths.companyCharacter(role), "PUT", body),
-  office: (body: UpdateOfficeRequest) =>
-    send<Company>(apiPaths.companyOffice, "PUT", body),
 };

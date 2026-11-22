@@ -1,5 +1,6 @@
 // Generated crop bounds for the approved SVG layers. See scripts/split-office-assets.py.
 export const officeAssetBounds = {
+  "developer-laptop": { x: 1064, y: 334, width: 78, height: 77 },
   "pm-desk": {
     x: 400,
     y: 179,
@@ -8,7 +9,7 @@ export const officeAssetBounds = {
   },
   pm: {
     x: 522,
-    y: 234,
+    y: 219,
     width: 52,
     height: 115,
   },
@@ -56,15 +57,15 @@ export const officeAssetBounds = {
   },
   "planner-chair": {
     x: 420.4,
-    y: 344.4,
+    y: 329.4,
     width: 55,
-    height: 55,
+    height: 70,
   },
   "pm-chair": {
     x: 525,
-    y: 300,
+    y: 285,
     width: 55,
-    height: 55,
+    height: 70,
   },
   "developer-desk": {
     x: 911.8,
@@ -74,7 +75,7 @@ export const officeAssetBounds = {
   },
   planner: {
     x: 417.4,
-    y: 278.4,
+    y: 263.4,
     width: 52,
     height: 115,
   },

@@ -6,7 +6,6 @@ export * from "@/contracts/runs";
 export * from "@/contracts/decisions";
 export * from "@/contracts/events";
 export * from "@/contracts/office";
-export * from "@/contracts/company";
 export * from "@/contracts/settings";
 export * from "@/contracts/results";
 export * from "@/contracts/health";

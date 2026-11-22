@@ -42,5 +42,4 @@ test("API 경로는 문서의 형식을 따르고 ID를 인코딩한다", () => 
   assert.equal(apiPaths.runStream("r1"), "/api/runs/r1/stream");
   assert.equal(apiPaths.decisionResponse("d1"), "/api/decisions/d1/response");
   assert.equal(apiPaths.officeState("p/1"), "/api/projects/p%2F1/office-state");
-  assert.equal(apiPaths.companyCharacter("PM"), "/api/company/characters/PM");
 });

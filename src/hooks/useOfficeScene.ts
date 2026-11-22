@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { Meeting, OfficeState, RoleId } from "@/contracts";
+import type {
+  Meeting,
+  MeetingStatement,
+  OfficeState,
+  RoleId,
+} from "@/contracts";
 import { apiPaths } from "@/contracts/paths";
 import { useOfficeResource } from "@/hooks/useOfficeResource";
 import { projectScene } from "@/components/office/scene/model";
@@ -15,7 +20,12 @@ export function useOfficeScene(
   const host = useRef<HTMLDivElement>(null);
   const renderer = useRef<OfficeScene | null>(null);
   const callbacks = useRef({ onRole, onMeeting, disabled });
+  const [presentation, setPresentation] = useState<{
+    meetingId: string | null;
+    statement: MeetingStatement | null;
+  } | null>(null);
   const [ready, setReady] = useState(false);
+  const [deliveredRunId, setDeliveredRunId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [reduced, setReduced] = useState(false);
@@ -65,6 +75,16 @@ export function useOfficeScene(
           () => {
             if (!callbacks.current.disabled) callbacks.current.onMeeting();
           },
+          (statement) => {
+            if (!controller.signal.aborted)
+              setPresentation({
+                meetingId: latest.current.snapshot.meetingId,
+                statement,
+              });
+          },
+          (id) => {
+            if (!controller.signal.aborted) setDeliveredRunId(id);
+          },
         ),
       )
       .then((created) => {
@@ -98,13 +118,12 @@ export function useOfficeScene(
   return {
     host,
     ready,
+    deliveredRunId,
     error,
-    statement: meeting.data?.statements.reduce<
-      Meeting["statements"][number] | undefined
-    >(
-      (last, next) => (!last || next.sequence > last.sequence ? next : last),
-      undefined,
-    ),
+    statement:
+      state?.activeMeeting?.id === presentation?.meetingId
+        ? (presentation?.statement ?? null)
+        : null,
     meeting: meeting.data,
     meetingError: meeting.error,
     reduced: reduced || still,

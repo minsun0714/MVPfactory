@@ -68,7 +68,7 @@ model Workspace {
 
   connections   ConnectionState[]
   projects      Project[]
-  company       CompanyLayout?
+  company       CompanyLayout? @ignore
   activeRunLock ActiveRunLock?
 }
 
