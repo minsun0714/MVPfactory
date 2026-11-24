@@ -5,6 +5,7 @@
 - `src/app/`: Next.js App Router 페이지, API 라우트(새로 작성 예정), 전역 CSS, 파비콘.
 - `src/components/`: 화면을 그리는 표현 컴포넌트. `src/hooks/`: 클라이언트 상태와 이벤트 처리. `src/services/`: 클라이언트의 HTTP 요청.
 - 서버 쪽은 `src/domain`(업무 규칙), `src/application`(유스케이스와 저장 계약), `src/infrastructure`(Prisma·PostgreSQL 구현), `src/server`(구성과 HTTP 공통 처리)로 나뉘고, `src/app/api`의 Route Handler가 이를 호출한다. 워커는 `src/worker.ts`(진입점), `src/application/worker.ts`·`workflow-steps.ts`(처리 방법), `src/infrastructure/workflow/`(LangGraph)에 있다. `prisma/schema/`에는 새 DB 스키마와 첫 마이그레이션(`prisma/schema/migrations`)이 있고, 화면·서버가 함께 쓰는 API 타입은 `src/contracts/`에 있다. 목표 구조는 [ARCHITECTURE.md](ARCHITECTURE.md) §17을 따른다. `tests/`: 서비스 테스트(서버 재작성 시 워크플로우 테스트 추가).
+- 워커 흐름은 `src/worker.ts` → `src/server/worker-runtime.ts`(저장소·단계·그래프·워커 구성) → `src/application/worker.ts`(Job 인수) → `src/infrastructure/workflow/graph-engine.ts`(체크포인트와 단계 순서)로 이어진다. 역할 작업은 `workflow-steps.ts`, CEO 검토는 `workflow-review-steps.ts`, 확정·마무리는 `workflow-final-steps.ts`에 있다. 역할 요청은 `agents.ts`, 모델 출력 검증은 `agent-output.ts`에 있다. `workflow-store.ts`는 Job·Run·산출물·결정·회의 저장소를 조합하며 각 저장소의 트랜잭션 경계는 유지한다.
 - `docs/`: 제품·아키텍처 요구사항. `README.md`: 설치 방법과 구현상의 제약. `TASKS.md`와 `tasks/`: 작업 관리 규칙과 작업 파일. `scripts/`: 작업 목록 출력 같은 개발 보조 스크립트.
 
 페이지는 얇게 유지한다. 뷰에는 타입이 있는 데이터와 콜백을 넘기고, 서비스 호출은 표현 컴포넌트 안이 아니라 hook에서 한다.

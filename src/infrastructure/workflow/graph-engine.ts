@@ -42,67 +42,68 @@ export async function createGraphEngine(deps: {
   const saver = PostgresSaver.fromConnString(deps.connectionString);
   await saver.setup();
 
-  const run =
+  const runStep =
     (fn: (runId: string) => Promise<unknown>) => async (state: GraphState) => {
       await fn(state.runId);
       return {};
     };
-  const wait = (kind: ReviewKind) => async (state: GraphState) => {
-    const decisionId = await steps.pendingDecisionId(state.runId, kind);
-    interrupt({ decisionId });
-    return {};
-  };
-  const afterReview =
+  const waitForCeoResponse =
+    (kind: ReviewKind) => async (state: GraphState) => {
+      const decisionId = await steps.pendingDecisionId(state.runId, kind);
+      interrupt({ decisionId });
+      return {};
+    };
+  const routeAfterReview =
     (kind: ReviewKind, revise: string, next: string) =>
     async (state: GraphState) =>
       (await steps.needsRevision(state.runId, kind)) ? revise : next;
 
   const graph = new StateGraph(State)
-    .addNode("intake", run(steps.intake))
-    .addNode("plan", run(steps.plan))
+    .addNode("intake", runStep(steps.intake))
+    .addNode("plan", runStep(steps.plan))
     .addNode(
       "prepare_scope",
-      run((id) => steps.prepareReview(id, "SCOPE_REVIEW")),
+      runStep((id) => steps.prepareReview(id, "SCOPE_REVIEW")),
     )
-    .addNode("wait_scope", wait("SCOPE_REVIEW"))
+    .addNode("wait_scope", waitForCeoResponse("SCOPE_REVIEW"))
     .addNode(
       "apply_scope",
-      run((id) => steps.applyReview(id, "SCOPE_REVIEW")),
+      runStep((id) => steps.applyReview(id, "SCOPE_REVIEW")),
     )
     .addNode(
       "revise_scope",
-      run((id) => steps.revise(id, "SCOPE_REVIEW")),
+      runStep((id) => steps.revise(id, "SCOPE_REVIEW")),
     )
-    .addNode("design", run(steps.design))
+    .addNode("design", runStep(steps.design))
     .addNode(
       "prepare_design",
-      run((id) => steps.prepareReview(id, "DESIGN_REVIEW")),
+      runStep((id) => steps.prepareReview(id, "DESIGN_REVIEW")),
     )
-    .addNode("wait_design", wait("DESIGN_REVIEW"))
+    .addNode("wait_design", waitForCeoResponse("DESIGN_REVIEW"))
     .addNode(
       "apply_design",
-      run((id) => steps.applyReview(id, "DESIGN_REVIEW")),
+      runStep((id) => steps.applyReview(id, "DESIGN_REVIEW")),
     )
     .addNode(
       "revise_design",
-      run((id) => steps.revise(id, "DESIGN_REVIEW")),
+      runStep((id) => steps.revise(id, "DESIGN_REVIEW")),
     )
     .addNode(
       "prepare_integrated",
-      run((id) => steps.prepareReview(id, "INTEGRATED_REVIEW")),
+      runStep((id) => steps.prepareReview(id, "INTEGRATED_REVIEW")),
     )
-    .addNode("wait_integrated", wait("INTEGRATED_REVIEW"))
+    .addNode("wait_integrated", waitForCeoResponse("INTEGRATED_REVIEW"))
     .addNode(
       "apply_integrated",
-      run((id) => steps.applyReview(id, "INTEGRATED_REVIEW")),
+      runStep((id) => steps.applyReview(id, "INTEGRATED_REVIEW")),
     )
     .addNode(
       "revise_integrated",
-      run((id) => steps.revise(id, "INTEGRATED_REVIEW")),
+      runStep((id) => steps.revise(id, "INTEGRATED_REVIEW")),
     )
-    .addNode("freeze", run(steps.freeze))
-    .addNode("implement", run(steps.implement))
-    .addNode("finalize", run(steps.finalize))
+    .addNode("freeze", runStep(steps.freeze))
+    .addNode("implement", runStep(steps.implement))
+    .addNode("finalize", runStep(steps.finalize))
     .addEdge(START, "intake")
     .addEdge("intake", "plan")
     .addConditionalEdges(
@@ -117,7 +118,7 @@ export async function createGraphEngine(deps: {
     .addEdge("wait_scope", "apply_scope")
     .addConditionalEdges(
       "apply_scope",
-      afterReview("SCOPE_REVIEW", "revise_scope", "design"),
+      routeAfterReview("SCOPE_REVIEW", "revise_scope", "design"),
       ["revise_scope", "design"],
     )
     .addEdge("revise_scope", "prepare_scope")
@@ -137,7 +138,7 @@ export async function createGraphEngine(deps: {
     .addEdge("wait_design", "apply_design")
     .addConditionalEdges(
       "apply_design",
-      afterReview("DESIGN_REVIEW", "revise_design", "freeze"),
+      routeAfterReview("DESIGN_REVIEW", "revise_design", "freeze"),
       ["revise_design", "freeze"],
     )
     .addEdge("revise_design", "prepare_design")
@@ -145,7 +146,7 @@ export async function createGraphEngine(deps: {
     .addEdge("wait_integrated", "apply_integrated")
     .addConditionalEdges(
       "apply_integrated",
-      afterReview("INTEGRATED_REVIEW", "revise_integrated", "freeze"),
+      routeAfterReview("INTEGRATED_REVIEW", "revise_integrated", "freeze"),
       ["revise_integrated", "freeze"],
     )
     .addEdge("revise_integrated", "prepare_integrated")

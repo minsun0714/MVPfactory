@@ -53,11 +53,11 @@ export type WorkerRuntimeOptions = {
 };
 
 export async function createWorkerRuntime(options: WorkerRuntimeOptions) {
-  const store = createWorkflowStore(db);
+  const workflowStore = createWorkflowStore(db);
   const { real } = options;
   // 실제 실행의 디자이너는 저장소에 고정한 디자인 지침을 반드시 쓴다. 읽지 못하면 워커를 시작하지 않는다.
   const designGuide = real ? await loadImpeccableGuide() : null;
-  const steps = createWorkflowSteps(store, {
+  const workflowSteps = createWorkflowSteps(workflowStore, {
     demoDelayMs: options.demoDelayMs,
     sleep: options.sleep,
     real: real
@@ -66,7 +66,7 @@ export async function createWorkerRuntime(options: WorkerRuntimeOptions) {
           agents: createRoleAgents(
             createMeteredModel({
               model: real.model,
-              store,
+              store: workflowStore,
               runId,
               price: real.price,
             }),
@@ -75,7 +75,7 @@ export async function createWorkerRuntime(options: WorkerRuntimeOptions) {
           developer: createSourceDeveloper({
             writer: real.codeWriter,
             runId,
-            store,
+            store: workflowStore,
           }),
           verification: {
             sandbox: real.sandbox,
@@ -96,14 +96,14 @@ export async function createWorkerRuntime(options: WorkerRuntimeOptions) {
         })
       : undefined,
   });
-  const engine = await createGraphEngine({
+  const graphEngine = await createGraphEngine({
     connectionString: options.connectionString,
-    steps,
-    store,
+    steps: workflowSteps,
+    store: workflowStore,
   });
   const worker = createWorker({
-    store,
-    engine,
+    store: workflowStore,
+    engine: graphEngine,
     workerId: options.workerId ?? `worker-${randomUUID().slice(0, 8)}`,
     log: options.log,
     redact: options.redact,
@@ -116,7 +116,7 @@ export async function createWorkerRuntime(options: WorkerRuntimeOptions) {
       while (processed < limit && (await worker.runOnce())) processed += 1;
       return processed;
     },
-    close: () => engine.close(),
+    close: () => graphEngine.close(),
   };
 }
 
