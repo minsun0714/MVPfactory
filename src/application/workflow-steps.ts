@@ -4,19 +4,19 @@
  *
  * 모든 단계는 다시 실행해도 같은 결과가 나오도록(멱등) 만든다. 재시작·재개 때 같은 노드가 다시 실행될 수 있다.
  */
+import { createWorkflowReviewSteps } from "@/application/workflow-review-steps";
+import { createWorkflowFinalSteps } from "@/application/workflow-final-steps";
 import type { RoleAgents } from "@/application/agents";
 import type { SourceDeveloper } from "@/application/code-writer";
 import type { BuildVerificationDeps } from "@/application/build-verification";
 import { implementWithRealModel } from "@/application/real-implementation";
-import { releaseSource, type ReleaseDeps } from "@/application/release";
+import type { ReleaseDeps } from "@/application/release";
 import { dataPlanOf } from "@/domain/data-plan";
 import {
   DocumentConsistencyError,
   reviewDocuments,
 } from "@/application/document-review";
 import {
-  CONFIRMED_SPEC_KEYS,
-  SPEC_PUBLIC_ACCESS,
   designProblems,
   planProblems,
   readConfirmedSpec,
@@ -32,23 +32,16 @@ import type {
   WorkflowStore,
 } from "@/application/workflow-ports";
 import type { RoleId } from "@/contracts/common";
-import type { DecisionChoice } from "@/contracts/decisions";
 import type { ArtifactAuthor } from "@/contracts/runs";
 import {
-  DELEGATION_RATIONALE,
-  approvalOutcome,
   implementationPlan,
-  internalMeeting,
   intakeBrief,
   productSpec,
-  proposalFor,
-  reviewMeeting,
   screenPlan,
   type DemoContext,
   type MeetingScript,
 } from "@/domain/demo-content";
 import {
-  REVIEWS,
   STEPS,
   reviewsAfter,
   type ReviewKind,
@@ -86,6 +79,20 @@ export type StepOptions = {
   sleep?: (ms: number) => Promise<void>;
   /** REAL Run을 처리할 때만 쓴다. 없으면 REAL Run은 시작 단계에서 멈춘다(가짜 성공 금지). */
   real?: (runId: string) => RealExecution;
+};
+
+export type WorkflowStepDependencies = {
+  store: WorkflowStore;
+  guard(runId: string): Promise<RunSnapshot>;
+  context(run: RunSnapshot): Promise<DemoContext>;
+  realOf(run: RunSnapshot): RealExecution;
+  runMeeting(
+    run: RunSnapshot,
+    topic: string,
+    script: () => Promise<MeetingScript>,
+    decisionId: string | null,
+    participants: RoleId[],
+  ): Promise<string>;
 };
 
 /** 문서 검토 회의 횟수 한도. 회의 1회는 모델 호출 1회와 담당 역할의 문서 수정(최대 2회)으로 이어진다. */
@@ -496,184 +503,23 @@ export function createWorkflowSteps(
     design: (runId: string) => roleStep(runId, "design"),
     implement: (runId: string) => roleStep(runId, "implement"),
 
-    /** 검토 제안과 회의를 만든다. 아직 CEO에게 열지 않는다(대기 지점이 저장된 뒤에 연다). */
-    async prepareReview(runId: string, kind: ReviewKind): Promise<void> {
-      const run = await guard(runId);
-      const def = REVIEWS[kind];
-      const artifacts = await store.latestArtifacts(runId);
-      const c = await context(run);
-      const proposal = proposalFor(
-        kind,
-        artifacts.PRODUCT_SPEC?.content ?? null,
-        artifacts.SCREEN_PLAN?.content ?? null,
-      );
-      // 데이터 공개 범위와 팀 검토에서 해결하지 못한 문제는 대표가 결정할 때 함께 보여 준다.
-      const publicAccess = artifacts.PRODUCT_SPEC?.content[SPEC_PUBLIC_ACCESS];
-      const unresolved = artifacts.DOCUMENT_REVIEW?.content["남은 문제"];
-      const draft = {
-        ...proposal,
-        proposal: [
-          ...proposal.proposal,
-          ...(publicAccess
-            ? [{ heading: "데이터 공개 범위", items: [publicAccess] }]
-            : []),
-          ...(unresolved && unresolved !== NONE
-            ? [
-                {
-                  heading: "팀 검토에서 남은 문제",
-                  items: unresolved.split(ARTIFACT_LIST_SEPARATOR),
-                },
-              ]
-            : []),
-        ],
-      };
-      const changes = (await store.collectFeedback(runId, [kind])).map(
-        (comment) => `대표님 수정 요청 반영: ${comment}`,
-      );
-      const decision = await store.prepareDecision(runId, kind, draft, changes);
-      const demo = reviewMeeting(kind, c);
-      await runMeeting(
-        run,
-        demo.topic,
-        async () =>
-          run.mode === "REAL"
-            ? realOf(run).agents.meeting(
-                demo.topic,
-                c,
-                Object.fromEntries(
-                  Object.values(artifacts).map((a) => [a.type, a.content]),
-                ),
-                def.participants,
-              )
-            : demo,
-        decision.id,
-        def.participants,
-      );
-    },
-
-    /** 대기 노드가 interrupt를 만들 대상 결정의 ID. 이 호출에는 부수 효과가 없다. */
-    async pendingDecisionId(runId: string, kind: ReviewKind): Promise<string> {
-      const decision = await store.findActiveDecision(runId, kind);
-      if (!decision) throw new Error("검토할 결정을 찾을 수 없습니다.");
-      return decision.id;
-    },
-
-    /** 응답을 사양에 반영한다. 반영한 결정은 다시 열지 않는다. */
-    async applyReview(
-      runId: string,
-      kind: ReviewKind,
-    ): Promise<DecisionChoice> {
-      await guard(runId);
-      const decision = await store.findActiveDecision(runId, kind);
-      if (!decision) throw new Error("응답을 반영할 결정을 찾을 수 없습니다.");
-      const result = await store.applyDecision(decision.id);
-      await store.endMeetingOfDecision(
-        decision.id,
-        approvalOutcome(result.choice, result.comment),
-      );
-      return result.choice;
-    },
-
-    /** 수정 요청을 받은 검토 지점의 산출물을 다시 만든다. */
-    async revise(runId: string, kind: ReviewKind): Promise<void> {
-      for (const key of REVIEWS[kind].revise) await roleStep(runId, key);
-    },
-
-    /** 검토가 끝나면(또는 위임형이면) 요구사항을 확정한다. 위임형은 CEO가 답한 것처럼 만들지 않는다. */
-    async freeze(runId: string): Promise<void> {
-      const run = await guard(runId);
-      const step = STEPS.freeze;
-      await store.beginStep(runId, step);
-      if (run.ceoLevel === "DELEGATE") {
-        const roles: RoleId[] = ["PM", "PLANNER", "DESIGNER", "DEVELOPER"];
-        const internal = internalMeeting();
-        const latest = await store.latestArtifacts(runId);
-        const meetingId = await runMeeting(
-          run,
-          internal.topic,
-          async () =>
-            run.mode === "REAL"
-              ? realOf(run).agents.meeting(
-                  internal.topic,
-                  await context(run),
-                  Object.fromEntries(
-                    Object.values(latest).map((a) => [a.type, a.content]),
-                  ),
-                  roles,
-                )
-              : internal,
-          null,
-          roles,
-        );
-        await store.endMeeting(
-          meetingId,
-          "DECIDED",
-          "위임 정책에 따라 팀이 확정했어요.",
-        );
-        await store.saveArtifact(runId, {
-          author: "SYSTEM",
-          type: "DELEGATION_RATIONALE",
-          title: "위임 확정 근거",
-          content: DELEGATION_RATIONALE,
-        });
-      }
-      const artifacts = await store.latestArtifacts(runId);
-      const version = await store.freezeSpec(runId, {
-        summary:
-          artifacts.PRODUCT_SPEC?.content["핵심 기능"] ?? run.project.idea,
-        content: {
-          [CONFIRMED_SPEC_KEYS.plan]: artifacts.PRODUCT_SPEC?.content ?? {},
-          [CONFIRMED_SPEC_KEYS.screens]: artifacts.SCREEN_PLAN?.content ?? {},
-          ...(run.mode === "DEMO" ? { 데모: true } : {}),
-        },
-      });
-      await store.completeStep(
-        runId,
-        step,
-        `요구사항을 확정했어요. (버전 ${version})`,
-        null,
-      );
-    },
-
-    async finalize(runId: string): Promise<void> {
-      const run = await guard(runId);
-      await store.beginStep(runId, STEPS.finalize);
-      if (run.mode !== "DEMO") {
-        const real = options.real?.(run.id);
-        if (!real?.release)
-          throw new Error(
-            "GitHub 저장소 반영과 Vercel 배포가 아직 구현되지 않아 마무리할 수 없어요. 빌드·테스트까지만 확인했고 제품 완료로 보지 않아요.",
-          );
-        const snapshot = await store.latestSourceSnapshot(runId);
-        if (!snapshot)
-          throw new Error("검증을 통과한 소스가 없어 배포하지 않았어요.");
-        const { specVersion, spec } = await confirmedDocuments(runId);
-        const released = await releaseSource(
-          { ...real.release, storage: real.storage },
-          {
-            projectId: run.projectId,
-            runId,
-            projectName: run.project.name,
-            specVersion,
-            snapshot,
-            dataPlan: dataPlanOf(spec),
-          },
-        );
-        await store.saveArtifact(runId, {
-          author: "DEVELOPER",
-          type: "RELEASE",
-          title: "배포 결과",
-          content: {
-            저장소: released.repositoryUrl,
-            커밋: released.commitSha,
-            "운영 주소": released.finalUrl,
-            "소스 식별자": snapshot.sourceDigest,
-            안내: "배포와 접속은 확인했어요. 요구사항별 동작 검증은 아직 하지 않아 제품 완료로 보지 않아요.",
-          },
-        });
-      }
-      await store.succeedRun(runId);
-    },
+    ...createWorkflowReviewSteps({
+      store,
+      guard,
+      context,
+      realOf,
+      runMeeting,
+      roleStep,
+    }),
+    ...createWorkflowFinalSteps({
+      store,
+      guard,
+      context,
+      realOf,
+      runMeeting,
+      confirmedDocuments,
+      configuredReal: options.real ?? (() => undefined),
+    }),
 
     // ── 경로 판단 (그래프의 조건 간선이 호출한다)
     async routeAfter(
